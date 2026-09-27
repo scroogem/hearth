@@ -243,7 +243,9 @@ public final class SharedWorld implements AutoCloseable {
 		RefUpdate update = repo.updateRef("refs/hearth/heartbeat");
 		update.setNewObjectId(commit);
 		update.forceUpdate();
-		push("+refs/hearth/heartbeat", "refs/heads/" + HEARTBEAT);
+		if (!push("+refs/hearth/heartbeat", "refs/heads/" + HEARTBEAT)) {
+			throw new IOException("Could not publish the host heartbeat");
+		}
 	}
 
 	/**

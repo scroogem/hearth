@@ -19,14 +19,13 @@ import java.util.Map;
 /** "Shared worlds": who is playing each world, and Host / Take over buttons. */
 public final class SharedWorldsScreen extends Screen {
 	private final Screen back;
-	private final List<HearthClient.Entry> entries = HearthClient.entries();
+	private List<HearthClient.Entry> entries = List.of();
 	private final Map<HearthClient.Entry, Object> statuses = new HashMap<>(); // Status or Throwable
 	private int refreshTicks;
 
 	public SharedWorldsScreen(Screen back) {
 		super(Component.translatable("hearth.shared_worlds"));
 		this.back = back;
-		refreshStatuses();
 	}
 
 	private void refreshStatuses() {
@@ -52,6 +51,12 @@ public final class SharedWorldsScreen extends Screen {
 
 	@Override
 	protected void init() {
+		List<HearthClient.Entry> current = HearthClient.entries();
+		if (!current.equals(entries)) {
+			entries = current;
+			statuses.clear();
+			refreshStatuses();
+		}
 		addRenderableWidget(new StringWidget(0, 12, width, 12, title, font));
 		int y = 36;
 		for (HearthClient.Entry e : entries) {

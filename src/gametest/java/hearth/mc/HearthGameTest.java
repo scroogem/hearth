@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /** Drives the real client: share a world, host it, leave, and check what landed in the remote repo. */
 public final class HearthGameTest implements FabricClientGameTest {
@@ -58,6 +59,10 @@ public final class HearthGameTest implements FabricClientGameTest {
 		ctx.waitFor(mc -> mc.level != null && mc.player != null, 20 * 120);
 		ctx.waitTicks(100);
 		check(lockHolder(origin) != null, "lock is held while playing");
+		ctx.waitFor(mc -> HearthClient.session != null && HearthClient.session.joinTarget().get() != null, 20 * 120);
+		check(HearthClient.session.joinTarget().get().endsWith(".steam"), "Steam join address is available");
+		SharedWorld.Status hosted = HearthClient.GIT.submit(() -> HearthClient.session.world().status()).get(30, TimeUnit.SECONDS);
+		check(hosted.joinTarget() != null && hosted.joinTarget().endsWith(".steam"), "Steam join address is published for guests");
 		ctx.takeScreenshot("hearth-hosting");
 
 		// Leave the world: Hearth saves and releases
@@ -72,8 +77,9 @@ public final class HearthGameTest implements FabricClientGameTest {
 		// Opening the shared world from the vanilla list must not bypass the lock
 		ctx.runOnClient(mc -> mc.createWorldOpenFlows().openWorld(folder, () -> {}));
 		ctx.waitFor(mc -> mc.level != null, 20 * 120);
-		ctx.waitFor(mc -> mc.level == null, 20 * 60);
+		ctx.waitFor(mc -> mc.level == null && mc.getSingleplayerServer() == null, 20 * 60);
 		check(commits(origin).size() == 3, "vanilla open did not touch the remote");
+		ctx.waitTicks(40); // the server thread finishes saving after Minecraft clears its client reference
 	}
 
 	private static void clickWhenShown(ClientGameTestContext ctx, String key) {

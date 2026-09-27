@@ -36,9 +36,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -56,8 +56,19 @@ public final class HearthClient implements ClientModInitializer {
 			AtomicBoolean publishStarted) {}
 
 	/** Every git operation runs here, one at a time, off the render thread. */
-	static final ScheduledExecutorService GIT = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, "hearth-git"));
+	static final ScheduledExecutorService GIT = gitExecutor();
 	static volatile Session session;
+
+	private static ScheduledExecutorService gitExecutor() {
+		ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1, r -> {
+			Thread thread = new Thread(r, "hearth-git");
+			thread.setDaemon(true);
+			return thread;
+		});
+		executor.setRemoveOnCancelPolicy(true);
+		executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+		return executor;
+	}
 
 	@Override
 	public void onInitializeClient() {
@@ -67,23 +78,19 @@ public final class HearthClient implements ClientModInitializer {
 						b -> mc.gui.setScreen(new SharedWorldsScreen(screen))).bounds(width - 130, 6, 124, 20).build());
 			}
 		});
-		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-			Path dir = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize();
-			Session s = session;
-			boolean ours = s != null && s.world().worldDir().toAbsolutePath().normalize().equals(dir);
-			if (!ours && Files.exists(dir.resolve(".hearth/meta.json"))) {
-				// Opened from the vanilla list: that would bypass the lock and fork the world.
-				Minecraft mc = Minecraft.getInstance();
-				mc.execute(() -> mc.disconnectFromWorld(Component.translatable("hearth.open_from_hearth")));
-			}
-		});
 		ClientTickEvents.END_CLIENT_TICK.register(mc -> {
 			Session s = session;
 			IntegratedServer integrated = mc.getSingleplayerServer();
-			if (s == null || mc.level == null || mc.getConnection() == null || integrated == null
-					|| !s.world().worldDir().toAbsolutePath().normalize().equals(
-							integrated.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize())
-					|| !s.publishStarted().compareAndSet(false, true)) return;
+			if (mc.level == null || mc.getConnection() == null || integrated == null) return;
+			Path dir = integrated.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize();
+			if (s == null || !s.world().worldDir().toAbsolutePath().normalize().equals(dir)) {
+				// A shared world opened through the vanilla list would bypass the lock and fork its history.
+				if (Files.exists(dir.resolve(".hearth/meta.json"))) {
+					mc.disconnectFromWorld(Component.translatable("hearth.open_from_hearth"));
+				}
+				return;
+			}
+			if (!s.publishStarted().compareAndSet(false, true)) return;
 			try {
 				if (integrated.isPublished() || integrated.publishServer(MinecraftServer.MultiplayerScope.LAN, HttpUtil.getAvailablePort())) {
 					pollSteamAddress(s, 0);
@@ -193,8 +200,12 @@ public final class HearthClient implements ClientModInitializer {
 		}
 		mc.gui.setScreen(new GenericMessageScreen(Component.translatable("hearth.downloading")));
 		async(() -> {
-			String folder = invite.name().replaceAll("[^\\p{L}\\p{N} _-]", "_");
-			for (int i = 2; Files.exists(savesDir().resolve(folder)); i++) folder = invite.name() + " " + i;
+			String base = invite.name().replaceAll("[^\\p{L}\\p{N} _-]", "_").strip();
+			if (base.isEmpty()) base = "Shared world";
+			String folder = base;
+			for (int i = 2; Files.exists(savesDir().resolve(folder)) || Files.exists(gameDir().resolve("hearth/repos/" + folder + ".git")); i++) {
+				folder = base + " " + i;
+			}
 			Entry entry = new Entry(invite.name(), folder, invite.remote());
 			SharedWorld.cloneInto(gitDir(entry), savesDir().resolve(folder), invite.remote()).close();
 			addEntry(entry);

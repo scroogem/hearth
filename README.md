@@ -12,6 +12,15 @@ Hearth is a Fabric mod for Minecraft Java 26.2. A shared world is stored as vers
 
 All players need Minecraft 26.2, Fabric Loader, Fabric API, e4steam 0.3.2 or newer, and a signed-in Steam client. e4steam must be installed separately on every player's computer. Hearth does not bundle it. The host and guests also need access to the Git repository used for the world.
 
+## Install and play
+
+1. Install Fabric Loader for Minecraft 26.2 and add Fabric API, the [e4steam 0.3.2 modern JAR](https://github.com/Kamilhik/e4steam/releases/tag/v0.3.2), and `hearth-0.1.0.jar` to the same Minecraft profile's `mods` folder. Hearth and e4steam are client mods; each participant installs both. Keep Steam running and signed in before launching Minecraft.
+2. Create an empty private GitHub repository for the world. Use a fine-grained token scoped to that repository with **Contents: Read and write** for HTTPS Git access. Hearth currently puts this same token in the invite, so everyone who receives the invite can read and write that repository.
+3. In Minecraft, open **Singleplayer → Shared worlds → Add a world**. Choose an existing local world, enter the empty repository URL and token, then share it. Copy its **Invite** from the shared-world list and send it privately to another participant.
+4. Guests open **Shared worlds → Add a world**, paste the invite, and add it. The current host uses **Host**; Steam friends of the host can use **Join** when the Steam address appears. When the host leaves the world, wait for Hearth to finish saving before closing Minecraft. Another participant can then host the next session.
+
+Hearth itself does not run a server outside the host's computer. GitHub stores world versions and the session heartbeat; Steam carries the live multiplayer connection. The same mod JAR is used on macOS and Windows.
+
 The shared-world invite currently contains the repository URL and its access token. The invite is Base64-encoded, **not encrypted**. Use only a fine-grained token scoped to that one world repository, and share invites only with people you trust. Member permissions and per-player tokens are not implemented yet.
 
 ## Build and test
@@ -23,7 +32,7 @@ JAVA_HOME=/path/to/jdk-25 ./gradlew test
 JAVA_HOME=/path/to/jdk-25 ./gradlew build
 ```
 
-The unit tests exercise Git storage, locking, takeover, recovery, and file synchronization against a local bare repository. A client gametest exists under `src/gametest`, but an end-to-end test of Steam Host/Join requires two signed-in Steam clients with e4steam installed. That path has not yet been verified here.
+The unit tests exercise Git storage, locking, takeover, recovery, and file synchronization against a local bare repository. The client gametest exercises sharing, hosting, Steam address publication, saving, and the lock guard with a signed-in Steam client and e4steam installed. A guest joining over Steam still needs a second signed-in Steam account and computer for verification.
 
 ## Known gaps
 
