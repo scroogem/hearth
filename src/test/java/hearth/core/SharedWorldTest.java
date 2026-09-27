@@ -115,8 +115,10 @@ class SharedWorldTest {
 						"alice's folder is back to the current version");
 
 				bob.release(bobLock);
-				assertNotNull(Git.open(tmp.resolve("origin.git").toFile()).getRepository().exactRef("refs/heads/" + lost.recoveryBranch),
-						"alice's late progress is kept on the remote");
+				try (Git origin = Git.open(tmp.resolve("origin.git").toFile())) {
+					assertNotNull(origin.getRepository().exactRef("refs/heads/" + lost.recoveryBranch),
+							"alice's late progress is kept on the remote");
+				}
 			}
 		}
 	}

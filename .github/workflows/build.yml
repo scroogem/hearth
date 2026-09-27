@@ -31,5 +31,15 @@ jobs:
             failure=${failure//$'\r'/'%0D'}
             failure=${failure//$'\n'/'%0A'}
             echo "::error title=Gradle build failed::$failure"
+            python - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+
+          for path in glob.glob('build/test-results/test/*.xml'):
+              for failure in ET.parse(path).iter('failure'):
+                  detail = (failure.text or '')[:12000]
+                  detail = detail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                  print('::error title=JUnit failure::' + detail)
+          PY
           fi
           exit "$result"
