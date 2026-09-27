@@ -1,6 +1,10 @@
 {
 	"hearth.shared_worlds": "Shared worlds",
 	"hearth.host": "Host",
+	"hearth.join": "Join",
+	"hearth.steam_required": "Install e4steam and sign in to Steam to host or join shared worlds.",
+	"hearth.steam_open_failed": "Hearth could not open this world to Steam. Your world is safe; leave it to release the host lock.",
+	"hearth.steam_timeout": "Steam did not provide a join address. Check e4steam and your Steam sign-in; friends cannot join yet.",
 	"hearth.take_over": "Take over",
 	"hearth.take_over_warning": "%s stopped responding. Continue from the last save? Their progress after it will be kept as a separate version.",
 	"hearth.invite": "Invite",

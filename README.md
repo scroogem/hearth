@@ -1,109 +1,30 @@
-<div align="center">
+# Hearth
 
-# 🔥 Hearth
+Hearth is a Fabric mod for Minecraft Java 26.2. A shared world is stored as versions in a Git repository. One player hosts it on their own computer while playing; friends connect through e4steam. When the host leaves, Hearth saves the world to the repository so another player can host the next session. Hearth has no coordinator or permanently running Minecraft server.
 
-**Persistent P2P Worlds for Minecraft** — a distributed world-save system with
-Git-backed storage, transport relays, and a snapshot history.
+## Current prototype
 
-Rust workspace • Tokio • `git2` • Tauri CLI
+- Share an existing singleplayer world through an empty private Git repository.
+- Add a shared world with an invite, then host it from the in-game Shared worlds screen.
+- Use a Git-backed lock and heartbeat so one player hosts a world at a time.
+- Save changed world files and deletions to Git on exit. Recover a late host's divergent save on a separate branch.
+- Open the hosted world to LAN; e4steam carries the gameplay connection over Steam. Other participants can use Join when the host's Steam address appears.
 
-[Workspace](#-workspace-crates) •
-[Install](#-installation) •
-[CLI](#-command-line) •
-[Architecture](#-architecture) •
-[License](#-license)
+All players need Minecraft 26.2, Fabric Loader, Fabric API, e4steam 0.3.2 or newer, and a signed-in Steam client. e4steam must be installed separately on every player's computer. Hearth does not bundle it. The host and guests also need access to the Git repository used for the world.
 
----
+The shared-world invite currently contains the repository URL and its access token. The invite is Base64-encoded, **not encrypted**. Use only a fine-grained token scoped to that one world repository, and share invites only with people you trust. Member permissions and per-player tokens are not implemented yet.
 
-</div>
+## Build and test
 
-Hearth lets Minecraft worlds outlive any single player's machine. Instead of
-uploading saves to a server you trust, Hearth stores world snapshots as Git
-history and syncs them peer-to-peer through optional relay/Steam transport layers.
+The Gradle wrapper uses Java 25:
 
-The core workspace is **storage-agnostic**: local filesystem, S3-compatible
-object storage, or any Git remote can act as the source of truth.
-
-## 🧱 Workspace crates
-
-| Crate | Role |
-|---|---|
-| `hearth-core` | Domain model: manifests, snapshots, locks, mod managers, storage providers |
-| `hearth-cli` | Command-line interface for worlds, instances, snapshots, and sync |
-| `hearth-transport` | Transport layer: direct TCP, relay, Steam networking |
-| `hearth-tauri` | Desktop (Tauri) shell for the CLI tooling |
-
-### `hearth-core` highlights
-
-- **Storage providers** — pluggable `StorageProvider` trait with local, S3, and
-  Git backends (`GitStorage`, `S3Storage`, `LocalStorage`).
-- **World manifests** — machine-readable world metadata with mod-loader and
-  gameplay-rule declarations (`Vanilla`, `Fabric`, `Forge`, …).
-- **Snapshots** — immutable, versioned world states with parent/child history;
-  `apply` restores a snapshot to any target path.
-- **World locking** — cooperating players take a lock before editing so two
-  machines never clobber the same version.
-- **Mod manager** — resolves and wires mods to an instance.
-
-## 🔧 Installation
-
-```bash
-# Build the whole workspace
-cargo build --release
-
-# Run the CLI
-cargo run -p hearth-cli -- --help
+```sh
+JAVA_HOME=/path/to/jdk-25 ./gradlew test
+JAVA_HOME=/path/to/jdk-25 ./gradlew build
 ```
 
-Requires Rust **1.70+** and `build-essential` (for `git2`/libgit2).
+The unit tests exercise Git storage, locking, takeover, recovery, and file synchronization against a local bare repository. A client gametest exists under `src/gametest`, but an end-to-end test of Steam Host/Join requires two signed-in Steam clients with e4steam installed. That path has not yet been verified here.
 
-## 🖥️ Command line
+## Known gaps
 
-```
-hearth init --remote-url <git> [--branch main] [--token …] [--username …]
-hearth world create <name> --mc-version 1.21 [--loader fabric] [--loader-version …]
-hearth world list | get <id> | update <id> | delete <id> | sync <world-id>
-hearth instance resolve <world-id> | launch <instance-id>
-hearth snapshot create <world-id> --world-path <path> [--parent <version>]
-hearth snapshot list <world-id> | get <world-id> <version> | apply <world-id> <version> --target-path <path>
-hearth lock            # take/release a cooperative edit lock
-```
-
-## 🏗️ Architecture
-
-```
-                ┌───────────────────────────────┐
-                │           hearth-cli           │
-                └──────────────┬────────────────┘
-                               │
-                ┌──────────────▼────────────────┐
-                │           hearth-core          │
-                │────────────────────────────────│
-                │  Manifest · Snapshot · Lock     │
-                │  ModManager · StorageProvider   │
-                └──────┬───────────────┬─────────┘
-                       │               │
-               ┌───────▼─────┐   ┌─────▼──────────┐
-               │   Storage   │   │   Transport    │
-               │ local · S3  │   │ direct·relay    │
-               │ git-storage │   │ steam          │
-               └─────────────┘   └───────────────┘
-```
-
-- **`hearth-core`** defines a world's lifecycle: create → edit (locked) →
-  snapshot → sync → apply → replay.
-- **`hearth-transport`** decouples "where the bytes live" (Git/S3/local) from
-  "how they travel" (direct TCP, relay, Steam), so peers can sync even when one
-  machine is behind NAT.
-- **`hearth-tauri`** wraps the same core as a desktop app.
-
-## 🔒 Security model
-
-- Locks are cooperative (documented), shared through the storage layer.
-- Git credentials (`--token`, `--username`) are accepted per-command and can be
-  persisted in a local config file — never hardcoded.
-- SSH-style trust: you only sync with peers/repos you explicitly configure.
-
-## 📜 License
-
-MIT — © Hearth Team.
+The prototype has no UUID-based member whitelist, permissions UI, automatic checkpoints, or provider abstraction. The e4steam addon API does not currently expose the active integrated-world join address, so `SteamBridge` reads that address through a small compatibility adapter against e4steam 0.3.2. This needs a real two-player compatibility test before release.

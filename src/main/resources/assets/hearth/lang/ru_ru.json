@@ -1,6 +1,10 @@
 {
 	"hearth.shared_worlds": "Общие миры",
 	"hearth.host": "Играть",
+	"hearth.join": "Подключиться",
+	"hearth.steam_required": "Установите e4steam и войдите в Steam, чтобы открыть мир или подключиться.",
+	"hearth.steam_open_failed": "Hearth не смог открыть мир для Steam. Выйдите из мира, чтобы освободить хостинг.",
+	"hearth.steam_timeout": "Steam не выдал адрес подключения. Проверьте e4steam и вход в Steam: друзья пока не смогут подключиться.",
 	"hearth.take_over": "Перехватить",
 	"hearth.take_over_warning": "%s не отвечает. Продолжить с последнего сохранения? Его прогресс после него сохранится отдельной версией.",
 	"hearth.invite": "Пригласить",

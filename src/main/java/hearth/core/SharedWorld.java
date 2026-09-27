@@ -66,7 +66,9 @@ public final class SharedWorld implements AutoCloseable {
 	public record Status(Meta meta, Lock lock, Heartbeat heartbeat, boolean stale) {
 		/** Where guests connect, if the current host published it. */
 		public String joinTarget() {
-			return heartbeat != null && lock.holder() != null && heartbeat.epoch() == lock.epoch() ? heartbeat.joinTarget() : null;
+			return !stale && heartbeat != null && lock.holder() != null
+					&& heartbeat.epoch() == lock.epoch() && lock.session() != null
+					&& lock.session().equals(heartbeat.session()) ? heartbeat.joinTarget() : null;
 		}
 	}
 

@@ -21,10 +21,15 @@ public final class SharedWorldsScreen extends Screen {
 	private final Screen back;
 	private final List<HearthClient.Entry> entries = HearthClient.entries();
 	private final Map<HearthClient.Entry, Object> statuses = new HashMap<>(); // Status or Throwable
+	private int refreshTicks;
 
 	public SharedWorldsScreen(Screen back) {
 		super(Component.translatable("hearth.shared_worlds"));
 		this.back = back;
+		refreshStatuses();
+	}
+
+	private void refreshStatuses() {
 		for (HearthClient.Entry e : entries) {
 			HearthClient.async(() -> {
 				try (SharedWorld world = HearthClient.open(e)) {
@@ -34,6 +39,14 @@ public final class SharedWorldsScreen extends Screen {
 				statuses.put(e, t != null ? t : status);
 				if (minecraft.gui.screen() == this) rebuildWidgets();
 			});
+		}
+	}
+
+	@Override
+	public void tick() {
+		if (++refreshTicks >= 200) {
+			refreshTicks = 0;
+			refreshStatuses();
 		}
 	}
 
@@ -51,6 +64,10 @@ public final class SharedWorldsScreen extends Screen {
 				boolean mine = holder != null && holder.id().equals(HearthClient.me().id());
 				if (holder == null || mine) {
 					addRenderableWidget(Button.builder(Component.translatable("hearth.host"), b -> HearthClient.host(e, false, this))
+							.bounds(width / 2 + 30, y, 70, 20).build());
+				} else if (status.joinTarget() != null) {
+					addRenderableWidget(Button.builder(Component.translatable("hearth.join"),
+							b -> HearthClient.join(e, status.joinTarget(), this))
 							.bounds(width / 2 + 30, y, 70, 20).build());
 				} else if (status.stale()) {
 					addRenderableWidget(Button.builder(Component.translatable("hearth.take_over"), b -> minecraft.gui.setScreen(new ConfirmScreen(
