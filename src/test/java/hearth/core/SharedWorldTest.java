@@ -4,6 +4,8 @@ import hearth.core.SharedWorld.Lock;
 import hearth.core.SharedWorld.Player;
 import hearth.core.SharedWorld.Remote;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.storage.file.WindowCacheConfig;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -29,6 +31,12 @@ class SharedWorldTest {
 	@TempDir
 	Path tmp;
 	Remote remote;
+
+	@AfterEach
+	void releaseGitPackCache() {
+		// JGit caches pack handles globally; Windows cannot delete the temp repo until they are released.
+		new WindowCacheConfig().install();
+	}
 
 	SharedWorld aliceCreates() throws Exception {
 		Path origin = tmp.resolve("origin.git");
