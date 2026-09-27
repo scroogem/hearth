@@ -20,4 +20,16 @@ jobs:
           cache: gradle
       - name: Test and package
         shell: bash
-        run: ./gradlew test build --no-daemon
+        run: |
+          set +e
+          ./gradlew test build --no-daemon > gradle.log 2>&1
+          result=$?
+          tail -80 gradle.log
+          if [ "$result" -ne 0 ]; then
+            failure=$(tail -40 gradle.log)
+            failure=${failure//'%'/'%25'}
+            failure=${failure//$'\r'/'%0D'}
+            failure=${failure//$'\n'/'%0A'}
+            echo "::error title=Gradle build failed::$failure"
+          fi
+          exit "$result"
