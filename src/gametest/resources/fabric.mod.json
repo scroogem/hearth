@@ -1,0 +1,10 @@
+{
+	"schemaVersion": 1,
+	"id": "hearth-gametest",
+	"version": "1",
+	"environment": "client",
+	"entrypoints": {
+		"fabric-client-gametest": ["hearth.mc.HearthGameTest"]
+	},
+	"depends": { "hearth": "*" }
+}
