@@ -1,0 +1,7 @@
+{
+	"required": true,
+	"package": "hearth.mc.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": ["SharedHostProfileMixin"],
+	"injectors": { "defaultRequire": 1 }
+}

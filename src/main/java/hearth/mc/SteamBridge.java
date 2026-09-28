@@ -1,10 +1,19 @@
 package hearth.mc;
 
 import net.fabricmc.loader.api.FabricLoader;
+import link.e4steam.api.identity.IdentityService;
+
+import java.util.UUID;
 
 /** The compatibility boundary with e4steam's integrated-world session. */
 final class SteamBridge {
+	static volatile IdentityService identities;
 	private SteamBridge() {}
+
+	static UUID localUuid() {
+		IdentityService service = identities;
+		return service == null ? null : service.local().value().map(local -> local.minecraft().uuid()).orElse(null);
+	}
 
 	static boolean installed() {
 		return FabricLoader.getInstance().isModLoaded("e4steam");

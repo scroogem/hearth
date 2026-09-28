@@ -35,6 +35,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -53,7 +54,7 @@ public final class HearthClient implements ClientModInitializer {
 
 	record Session(Entry entry, SharedWorld world, SharedWorld.Lock lock,
 			ScheduledFuture<?> heartbeat, AtomicReference<String> joinTarget,
-			AtomicBoolean publishStarted) {}
+			AtomicBoolean publishStarted, UUID playerUuid) {}
 
 	/** Every git operation runs here, one at a time, off the render thread. */
 	static final ScheduledExecutorService GIT = gitExecutor();
@@ -136,6 +137,14 @@ public final class HearthClient implements ClientModInitializer {
 
 	static SharedWorld open(Entry e) throws IOException {
 		return SharedWorld.open(gitDir(e), savesDir().resolve(e.folder()), e.remote());
+	}
+
+	/** Only the local player of the shared integrated server receives the Steam profile. */
+	public static UUID hostPlayerUuid(MinecraftServer server) {
+		Session s = session;
+		if (s == null || !(server instanceof IntegratedServer)) return null;
+		Path dir = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize();
+		return s.world().worldDir().toAbsolutePath().normalize().equals(dir) ? s.playerUuid() : null;
 	}
 
 	static synchronized List<Entry> entries() {
@@ -222,7 +231,10 @@ public final class HearthClient implements ClientModInitializer {
 		}
 		mc.gui.setScreen(new GenericMessageScreen(Component.translatable("hearth.downloading")));
 		async(() -> {
+			UUID steamUuid = SteamBridge.localUuid();
+			if (steamUuid == null) throw new IllegalStateException(Component.translatable("hearth.steam_required").getString());
 			SharedWorld world = open(entry);
+			SharedWorld.Lock acquired = null;
 			try {
 				String version = SharedConstants.getCurrentVersion().name();
 				SharedWorld.Status status = world.status();
@@ -230,6 +242,8 @@ public final class HearthClient implements ClientModInitializer {
 					throw new IllegalStateException(Component.translatable("hearth.wrong_version", status.meta().minecraftVersion(), version).getString());
 				}
 				SharedWorld.Lock lock = world.acquire(me(), takeover);
+				acquired = lock;
+				HostPlayerData.prepare(world.worldDir(), Minecraft.getInstance().getUser().getProfileId(), steamUuid);
 				forgetPreviousHost(world.worldDir());
 				AtomicReference<String> joinTarget = new AtomicReference<>();
 				ScheduledFuture<?> beat = GIT.scheduleWithFixedDelay(() -> {
@@ -241,9 +255,16 @@ public final class HearthClient implements ClientModInitializer {
 						LOG.warn("Heartbeat failed, will retry", e);
 					}
 				}, 60, 60, TimeUnit.SECONDS);
-				session = new Session(entry, world, lock, beat, joinTarget, new AtomicBoolean());
+				session = new Session(entry, world, lock, beat, joinTarget, new AtomicBoolean(), steamUuid);
 				return null;
 			} catch (Exception e) {
+				if (acquired != null) {
+					try {
+						world.release(acquired);
+					} catch (Exception releaseFailure) {
+						e.addSuppressed(releaseFailure);
+					}
+				}
 				world.close();
 				throw e;
 			}

@@ -7,6 +7,8 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
@@ -37,6 +39,8 @@ public final class HearthGameTest implements FabricClientGameTest {
 		Path worldDir;
 		try (TestSingleplayerContext sp = ctx.worldBuilder().create()) {
 			sp.getConnection().waitForChunksRender();
+			sp.getServer().runOnServer(server -> server.getPlayerList().getPlayers().getFirst()
+					.getInventory().setItem(0, new ItemStack(Items.DIAMOND, 7)));
 			worldDir = sp.getWorldSave().getSaveDirectory();
 		}
 		String folder = worldDir.getFileName().toString();
@@ -58,6 +62,19 @@ public final class HearthGameTest implements FabricClientGameTest {
 		clickWhenShown(ctx, "hearth.host");
 		ctx.waitFor(mc -> mc.level != null && mc.player != null, 20 * 120);
 		ctx.waitTicks(100);
+		check(ctx.computeOnClient(mc -> mc.player.getUUID().equals(SteamBridge.localUuid())), "host uses the guest-compatible Steam UUID");
+		check(ctx.computeOnClient(mc -> mc.player.getInventory().getItem(0).is(Items.DIAMOND)
+				&& mc.player.getInventory().getItem(0).getCount() == 7), "singleplayer inventory migrated to Steam profile");
+		ctx.runOnClient(mc -> {
+			var server = mc.getSingleplayerServer();
+			String name = mc.getUser().getName();
+			server.execute(() -> {
+				server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "give " + name + " minecraft:diamond 4");
+				server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "tp " + name + " 12.5 -60 12.5");
+			});
+		});
+		ctx.waitFor(mc -> mc.player.getInventory().getItem(0).getCount() == 11
+				&& Math.abs(mc.player.getX() - 12.5) < 0.1 && Math.abs(mc.player.getZ() - 12.5) < 0.1);
 		check(lockHolder(origin) != null, "lock is held while playing");
 		ctx.waitFor(mc -> HearthClient.session != null && HearthClient.session.joinTarget().get() != null, 20 * 120);
 		check(HearthClient.session.joinTarget().get().endsWith(".steam"), "Steam join address is available");
@@ -80,6 +97,22 @@ public final class HearthGameTest implements FabricClientGameTest {
 		ctx.waitFor(mc -> mc.level == null && mc.getSingleplayerServer() == null, 20 * 60);
 		check(commits(origin).size() == 3, "vanilla open did not touch the remote");
 		ctx.waitTicks(40); // the server thread finishes saving after Minecraft clears its client reference
+
+		// Reopening must prefer the saved Steam profile over the older singleplayer backup.
+		ctx.setScreen(() -> new SharedWorldsScreen(new TitleScreen()));
+		clickWhenShown(ctx, "hearth.host");
+		ctx.waitFor(mc -> mc.level != null && mc.player != null);
+		ctx.waitTicks(40);
+		check(ctx.computeOnClient(mc -> mc.player.getUUID().equals(SteamBridge.localUuid())
+				&& mc.player.getInventory().getItem(0).is(Items.DIAMOND)
+				&& mc.player.getInventory().getItem(0).getCount() == 11), "Steam inventory survives the next host session");
+		check(ctx.computeOnClient(mc -> Math.abs(mc.player.getX() - 12.5) < 0.1 && Math.abs(mc.player.getZ() - 12.5) < 0.1),
+				"Steam player position survives the next host session");
+		ctx.runOnClient(mc -> mc.disconnectWithSavingScreen());
+		ctx.waitFor(mc -> HearthClient.session == null && mc.gui.screen() instanceof SharedWorldsScreen, 20 * 120);
+		ctx.waitTicks(40);
+		check(lockHolder(origin) == null, "lock released after reopening");
+		ctx.setScreen(TitleScreen::new);
 	}
 
 	private static void clickWhenShown(ClientGameTestContext ctx, String key) {
