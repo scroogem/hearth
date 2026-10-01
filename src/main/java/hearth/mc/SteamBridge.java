@@ -1,18 +1,28 @@
 package hearth.mc;
 
 import net.fabricmc.loader.api.FabricLoader;
-import link.e4steam.api.identity.IdentityService;
 
 import java.util.UUID;
 
 /** The compatibility boundary with e4steam's integrated-world session. */
 final class SteamBridge {
-	static volatile IdentityService identities;
+	static volatile Object identities;
 	private SteamBridge() {}
 
 	static UUID localUuid() {
-		IdentityService service = identities;
-		return service == null ? null : service.local().value().map(local -> local.minecraft().uuid()).orElse(null);
+		if (!installed() || identities == null) return null;
+		try {
+			var localMethod = Class.forName("link.e4steam.api.identity.IdentityService").getMethod("local");
+			Object view = localMethod.invoke(identities);
+			var value = (java.util.Optional<?>) localMethod.getReturnType().getMethod("value").invoke(view);
+			if (value.isEmpty()) return null;
+			Object local = value.get();
+			Object profile = local.getClass().getMethod("minecraft").invoke(local);
+			return (UUID) profile.getClass().getMethod("uuid").invoke(profile);
+		} catch (ReflectiveOperationException | LinkageError e) {
+			HearthClient.LOG.warn("Could not read the optional Steam identity", e);
+			return null;
+		}
 	}
 
 	static boolean installed() {

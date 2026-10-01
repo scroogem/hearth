@@ -51,8 +51,76 @@ class SharedWorldTest {
 	}
 
 	SharedWorld bobClones() throws Exception {
-		Invite invite = Invite.decode(new Invite("World", remote).encode());
-		return SharedWorld.cloneInto(tmp.resolve("bob/repo.git"), tmp.resolve("bob/saves/World"), invite.remote());
+		return SharedWorld.cloneInto(tmp.resolve("bob/repo.git"), tmp.resolve("bob/saves/World"), remote);
+	}
+
+	@Test
+	void interruptedInitialUploadCanBeRetriedWithoutResettingAPlayedWorld() throws Exception {
+		Path origin = tmp.resolve("delayed-origin.git"), save = tmp.resolve("save"), gitDir = tmp.resolve("repo.git");
+		Files.createDirectories(save);
+		Files.write(save.resolve("level.dat"), new byte[]{7, 8});
+		Remote delayed = new Remote(origin.toString(), "", "");
+		var meta = new SharedWorld.Meta("World", "26.2");
+		assertThrows(Exception.class, () -> SharedWorld.create(gitDir, save, delayed, meta));
+		Git.init().setBare(true).setInitialBranch("main").setDirectory(origin.toFile()).call().close();
+		try (var world = SharedWorld.create(gitDir, save, delayed, meta)) {
+			assertArrayEquals(new byte[]{7, 8}, Files.readAllBytes(save.resolve("level.dat")));
+			world.release(world.acquire(ALICE, false));
+		}
+		assertThrows(java.io.IOException.class, () -> SharedWorld.create(gitDir, save, delayed, meta));
+		try (var world = SharedWorld.open(gitDir, save, delayed)) {
+			assertEquals(1, world.status().lock().epoch());
+		}
+	}
+
+	@Test
+	void rollbackCreatesANewSaveAndCannotOverwriteAnActiveHost() throws Exception {
+		try (SharedWorld alice = aliceCreates()) {
+			String initial = alice.history().getFirst().commit();
+			Lock lock = alice.acquire(ALICE, false);
+			Files.write(alice.worldDir().resolve("region/r.0.0.mca"), new byte[]{99});
+			assertThrows(SharedWorld.WorldBusyException.class, () -> alice.restore(initial, ALICE));
+			alice.release(lock);
+			alice.restore(initial, ALICE);
+			assertArrayEquals(new byte[]{10, 0, 13, 10}, Files.readAllBytes(alice.worldDir().resolve("region/r.0.0.mca")));
+			assertTrue(alice.history().getFirst().description().startsWith("Restore:"));
+			assertEquals(3, alice.history().size());
+			assertNull(alice.status().lock().holder());
+			assertThrows(java.io.IOException.class, () -> alice.restore("refs/heads/main", ALICE));
+		}
+	}
+
+	@Test
+	void aCloneOfTheSameProfileCannotStealAnActiveSession() throws Exception {
+		try (SharedWorld alice = aliceCreates()) {
+			Lock lock = alice.acquire(ALICE, false);
+			try (SharedWorld anotherPc = bobClones()) {
+				assertThrows(SharedWorld.WorldBusyException.class, () -> anotherPc.acquire(ALICE, false));
+				assertThrows(SharedWorld.LostLockException.class, () -> anotherPc.heartbeat(
+						new Lock(ALICE, lock.epoch(), "different-session"), "wrong.steam"));
+				assertNull(alice.status().joinTarget());
+			}
+			alice.release(lock);
+		}
+	}
+
+	@Test
+	void aCheckpointSurvivesTheHostComputerDying() throws Exception {
+		Lock first;
+		try (SharedWorld alice = aliceCreates()) {
+			first = alice.acquire(ALICE, false);
+			Files.write(alice.worldDir().resolve("region/r.0.0.mca"), new byte[]{21});
+			alice.checkpoint(first);
+			assertEquals(first, alice.status().lock());
+		} // no release: the machine stops after its periodic save
+		bobClones().close();
+		Clock later = Clock.fixed(Instant.now().plus(Duration.ofMinutes(10)), ZoneOffset.UTC);
+		try (SharedWorld bob = SharedWorld.open(tmp.resolve("bob/repo.git"), tmp.resolve("bob/saves/World"), remote, later)) {
+			Lock lock = bob.acquire(BOB, true);
+			assertArrayEquals(new byte[]{21}, Files.readAllBytes(bob.worldDir().resolve("region/r.0.0.mca")));
+			assertThrows(SharedWorld.LostLockException.class, () -> bob.checkpoint(first));
+			bob.release(lock);
+		}
 	}
 
 	@Test
@@ -136,8 +204,10 @@ class SharedWorldTest {
 		Path gitDir;
 		Path world;
 		try (SharedWorld alice = aliceCreates()) {
-			alice.acquire(ALICE, false);
+			Lock first = alice.acquire(ALICE, false);
 			Files.write(alice.worldDir().resolve("region/r.0.0.mca"), new byte[]{5});
+			alice.prepareCheckpoint(first); // committed locally; upload was interrupted
+			Files.write(alice.worldDir().resolve("region/r.1.0.mca"), new byte[]{6});
 			gitDir = tmp.resolve("alice/repo.git");
 			world = alice.worldDir();
 		} // PC dies here: no release
@@ -145,6 +215,7 @@ class SharedWorldTest {
 			assertThrows(SharedWorld.WorldBusyException.class, () -> bob.acquire(BOB, false));
 			Lock lock = alice.acquire(ALICE, false);
 			assertArrayEquals(new byte[]{5}, Files.readAllBytes(world.resolve("region/r.0.0.mca")), "progress kept");
+			assertArrayEquals(new byte[]{6}, Files.readAllBytes(world.resolve("region/r.1.0.mca")), "changes after the local checkpoint kept");
 			alice.release(lock);
 			bob.acquire(BOB, false);
 			assertArrayEquals(new byte[]{5}, Files.readAllBytes(bob.worldDir().resolve("region/r.0.0.mca")));

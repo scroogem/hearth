@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 public final class HearthGameTest implements FabricClientGameTest {
 	@Override
 	public void runTest(ClientGameTestContext ctx) {
+
 		try {
 			run(ctx);
 		} catch (RuntimeException | Error e) {
@@ -59,7 +60,7 @@ public final class HearthGameTest implements FabricClientGameTest {
 		check(commits(origin).size() == 1, "world uploaded");
 
 		// Host: wait for the status to load, press the button, play for a few seconds
-		clickWhenShown(ctx, "hearth.host");
+		clickWhenShown(ctx, "hearth.play");
 		ctx.waitFor(mc -> mc.level != null && mc.player != null, 20 * 120);
 		ctx.waitTicks(100);
 		check(ctx.computeOnClient(mc -> mc.player.getUUID().equals(SteamBridge.localUuid())), "host uses the guest-compatible Steam UUID");
@@ -80,6 +81,14 @@ public final class HearthGameTest implements FabricClientGameTest {
 		check(HearthClient.session.joinTarget().get().endsWith(".steam"), "Steam join address is available");
 		SharedWorld.Status hosted = HearthClient.GIT.submit(() -> HearthClient.session.world().status()).get(30, TimeUnit.SECONDS);
 		check(hosted.joinTarget() != null && hosted.joinTarget().endsWith(".steam"), "Steam join address is published for guests");
+		var checkpoint = HearthClient.GIT.submit(() -> {
+			try { HearthClient.checkpoint(HearthClient.session); }
+			catch (Exception e) { throw new RuntimeException(e); }
+		});
+		ctx.waitFor(mc -> checkpoint.isDone(), 20 * 90);
+		checkpoint.get(1, TimeUnit.SECONDS);
+		check(commits(origin).getFirst().startsWith("Checkpoint:"), "running world checkpoint published");
+		check(lockHolder(origin) != null, "checkpoint retains the active session");
 		ctx.takeScreenshot("hearth-hosting");
 
 		// Leave the world: Hearth saves and releases
@@ -88,19 +97,19 @@ public final class HearthGameTest implements FabricClientGameTest {
 		ctx.waitTicks(40);
 		ctx.takeScreenshot("hearth-shared-worlds");
 		List<String> log = commits(origin);
-		check(log.size() == 3 && log.get(0).startsWith("Save:") && log.get(1).startsWith("Host:"), "create, host, save: " + log);
+		check(log.size() == 4 && log.get(0).startsWith("Save:") && log.get(1).startsWith("Checkpoint:"), "create, host, checkpoint, save: " + log);
 		check(lockHolder(origin) == null, "lock released");
 
 		// Opening the shared world from the vanilla list must not bypass the lock
 		ctx.runOnClient(mc -> mc.createWorldOpenFlows().openWorld(folder, () -> {}));
-		ctx.waitFor(mc -> mc.level != null, 20 * 120);
-		ctx.waitFor(mc -> mc.level == null && mc.getSingleplayerServer() == null, 20 * 60);
-		check(commits(origin).size() == 3, "vanilla open did not touch the remote");
+		ctx.waitForScreen(net.minecraft.client.gui.screens.AlertScreen.class);
+		check(ctx.computeOnClient(mc -> mc.level == null && mc.getSingleplayerServer() == null), "vanilla open blocked before server launch");
+		check(commits(origin).size() == 4, "vanilla open did not touch the remote");
 		ctx.waitTicks(40); // the server thread finishes saving after Minecraft clears its client reference
 
 		// Reopening must prefer the saved Steam profile over the older singleplayer backup.
 		ctx.setScreen(() -> new SharedWorldsScreen(new TitleScreen()));
-		clickWhenShown(ctx, "hearth.host");
+		clickWhenShown(ctx, "hearth.play");
 		ctx.waitFor(mc -> mc.level != null && mc.player != null);
 		ctx.waitTicks(40);
 		check(ctx.computeOnClient(mc -> mc.player.getUUID().equals(SteamBridge.localUuid())

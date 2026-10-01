@@ -1,7 +1,21 @@
 {
-	"required": true,
-	"package": "hearth.mc.mixin",
-	"compatibilityLevel": "JAVA_25",
-	"client": ["SharedHostProfileMixin"],
-	"injectors": { "defaultRequire": 1 }
+  "required": true,
+  "package": "hearth.mc.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "SharedHostProfileMixin",
+    "LoginAccess",
+    "PlayConnectionAccess",
+    "SharedLoginGuardMixin",
+    "SharedPermissionsMixin",
+    "SharedOwnerMixin",
+    "SharedGameModeMixin",
+    "SharedGameModeCommandMixin",
+    "SharedRulesMixin",
+    "SharedCommandsMixin",
+    "SharedWorldOpenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

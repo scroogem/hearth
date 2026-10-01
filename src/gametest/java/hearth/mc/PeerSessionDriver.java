@@ -20,6 +20,8 @@ public final class PeerSessionDriver implements ClientModInitializer {
 	private long guestJoinedAt;
 	private boolean checkingPeer;
 	private boolean guestVerified;
+	private boolean survivedGuestExit;
+	private volatile long rulesChangedAt;
 
 	@Override
 	public void onInitializeClient() {
@@ -45,17 +47,90 @@ public final class PeerSessionDriver implements ClientModInitializer {
 				Files.createDirectories(signals);
 				Files.deleteIfExists(signals.resolve("release-host"));
 				stage = Stage.OPENING;
-				HearthClient.host(entry, false, new SharedWorldsScreen(new TitleScreen()));
+				HearthClient.play(entry, new SharedWorldsScreen(new TitleScreen()));
 			}
 			case OPENING -> {
+				if (mc.level != null && mc.player != null && mc.getSingleplayerServer() == null) {
+					stage = Stage.JOINED;
+					signal("PEER_JOIN_VERIFIED");
+					return;
+				}
 				if (mc.level == null || HearthClient.session == null || HearthClient.session.joinTarget().get() == null) return;
+				if (Boolean.getBoolean("hearth.peer.expectSteam") && !HearthClient.session.joinTarget().get().endsWith(".steam")) return;
 				stage = Stage.HOSTING;
 				signal("HOST_READY");
 			}
 			case HOSTING -> {
 				var server = mc.getSingleplayerServer();
-				if (server == null) return;
+				if (server == null || server.isStopped()) throw new IllegalStateException("Participant host stopped unexpectedly");
 				int players = server.getPlayerList().getPlayerCount();
+				var local = new net.minecraft.server.players.NameAndId(HearthClient.session.playerUuid(), mc.getUser().getName());
+				if (!server.isSingleplayerOwner(local)) throw new IllegalStateException("Local host lost lifecycle ownership");
+				var policy = HearthClient.session.policy().get();
+				if (Files.exists(signals.resolve("approve-pack"))) {
+					Files.delete(signals.resolve("approve-pack"));
+					var active = HearthClient.session;
+					HearthClient.async(() -> {
+						try (var store = new hearth.core.PolicyStore(HearthClient.gitDir(entry).resolve("policy.git"),
+								entry.remote().trust().policyUrl(), entry.remote().trust().policyAccess())) {
+							var latest = store.load(entry.remote().trust());
+							var settings = new hearth.core.WorldPolicy.Settings("survival", "normal", false, false, false, false,
+									java.util.Map.of("keep_inventory", "false"));
+							var approved = new hearth.core.WorldPolicy(latest.worldId(), latest.ownerKey(), latest.revision() + 1,
+									settings, latest.members(), latest.bannedIps(), ModManifest.current());
+							store.publish(approved, entry.remote().ssh()); active.policy().set(approved);
+							HearthClient.LOG.info("[peer-test] OWNER_RULES_AND_PACK_APPROVED");
+						}
+						return null;
+					});
+				}
+				if (policy != null && !policy.ownerUuid().equals(local.id())) {
+					if (server.isSingleplayerOwner(new net.minecraft.server.players.NameAndId(policy.ownerUuid(), "Creator")))
+						throw new IllegalStateException("Creator must not control another host's lifecycle");
+					if (!server.getProfilePermissions(local).equals(net.minecraft.server.permissions.LevelBasedPermissionSet.ALL))
+						throw new IllegalStateException("Hosting granted creator permissions");
+				}
+				if (players == 1 && guestJoinedAt > 0 && !survivedGuestExit) {
+					survivedGuestExit = true;
+					HearthClient.LOG.info("[peer-test] HOST_SURVIVED_GUEST_EXIT");
+				}
+				if (Files.exists(signals.resolve("write-marker"))) {
+					Files.delete(signals.resolve("write-marker"));
+					server.execute(() -> {
+						server.overworld().setBlockAndUpdate(new net.minecraft.core.BlockPos(0, 65, 0), net.minecraft.world.level.block.Blocks.GOLD_BLOCK.defaultBlockState());
+						HearthClient.LOG.info("[peer-test] WORLD_MARKER_WRITTEN");
+					});
+				}
+				if (Files.exists(signals.resolve("check-rules"))) {
+					Files.delete(signals.resolve("check-rules"));
+					server.execute(() -> {
+						server.setDefaultGameType(net.minecraft.world.level.GameType.CREATIVE);
+						server.setDifficulty(net.minecraft.world.Difficulty.PEACEFUL, true);
+						if (server.getDefaultGameType() != net.minecraft.world.level.GameType.byName(policy.settings().gameMode())
+								|| server.getWorldData().getDifficulty() != net.minecraft.world.Difficulty.byName(policy.settings().difficulty()))
+							throw new AssertionError("Host changed signed world settings");
+						var guest = server.getPlayerList().getPlayers().stream().filter(p -> !p.getUUID().equals(policy.ownerUuid())).findFirst().orElseThrow();
+						guest.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+						if (guest.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.CREATIVE)
+							throw new AssertionError("Guest enabled forbidden creative mode");
+						server.getGameRules().set(net.minecraft.world.level.gamerules.GameRules.KEEP_INVENTORY, true, server);
+						rulesChangedAt = server.getTickCount();
+					});
+				}
+				if (rulesChangedAt > 0 && server.getTickCount() - rulesChangedAt > 25) {
+					rulesChangedAt = 0;
+					if (server.getGameRules().get(net.minecraft.world.level.gamerules.GameRules.KEEP_INVENTORY))
+						throw new AssertionError("Signed game rule was not restored");
+					HearthClient.LOG.info("[peer-test] SIGNED_GAME_RULES_AND_CREATIVE_GUARDS_VERIFIED");
+				}
+				if (Files.exists(signals.resolve("verify-marker"))) {
+					Files.delete(signals.resolve("verify-marker"));
+					server.execute(() -> {
+						if (!server.overworld().getBlockState(new net.minecraft.core.BlockPos(0, 65, 0)).is(net.minecraft.world.level.block.Blocks.GOLD_BLOCK))
+							throw new IllegalStateException("Next host did not receive the friend's world changes");
+						HearthClient.LOG.info("[peer-test] FRIEND_WORLD_CHANGES_VERIFIED");
+					});
+				}
 				if (players >= 2 && guestJoinedAt == 0) {
 					guestJoinedAt = System.currentTimeMillis();
 					signal("GUEST_CONNECTED");
@@ -87,7 +162,7 @@ public final class PeerSessionDriver implements ClientModInitializer {
 					}
 				}).whenComplete((status, failure) -> {
 					checkingPeer = false;
-					if (failure != null || status.joinTarget() == null || status.lock().holder().id().equals(HearthClient.me().id())) return;
+					if (failure != null || status.joinTarget() == null || status.lock().holder().id().equals(HearthClient.me(entry).id())) return;
 					stage = Stage.JOINING;
 					HearthClient.join(entry, status.joinTarget(), new SharedWorldsScreen(new TitleScreen()));
 				});
@@ -97,7 +172,14 @@ public final class PeerSessionDriver implements ClientModInitializer {
 				stage = Stage.JOINED;
 				signal("PEER_JOIN_VERIFIED");
 			}
-			case JOINED, FAILED -> { }
+			case JOINED -> {
+				if (mc.level == null && Files.exists(signals.resolve("host-now"))) {
+					Files.delete(signals.resolve("host-now"));
+					stage = Stage.OPENING;
+					HearthClient.play(entry, new SharedWorldsScreen(new TitleScreen()));
+				}
+			}
+			case FAILED -> { }
 		}
 	}
 

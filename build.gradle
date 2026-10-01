@@ -14,6 +14,10 @@ dependencies {
 	// Git storage. slf4j and commons-codec already ship with Minecraft.
 	include(implementation("org.eclipse.jgit:org.eclipse.jgit:${project.jgit_version}"))
 	include(implementation("com.googlecode.javaewah:JavaEWAH:1.2.3"))
+	// Per-world SSH deploy keys let invited players use GitHub without GitHub accounts.
+	include(implementation("org.eclipse.jgit:org.eclipse.jgit.ssh.apache:${project.jgit_version}"))
+	include(implementation("org.apache.sshd:sshd-osgi:2.19.0"))
+	include(implementation("org.apache.sshd:sshd-sftp:2.19.0"))
 
 	// Optional: Steam transport via e4steam, supplied by e4steam at runtime.
 	compileOnly "io.github.kamilhik:e4steam-api:${project.e4steam_api_version}"
