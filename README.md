@@ -19,7 +19,7 @@ A Fabric client mod for Minecraft Java 26.2. The person playing hosts the shared
 This is a development build, not a completed public release:
 
 1. Register the native GitHub OAuth app and include its public client ID. Creator sign-in is currently unconfigured. Real SSH world storage and account-free guest access have been tested independently.
-2. Test the bundled Steam bridge between macOS and Windows with separate signed-in Steam accounts. The old external e4steam bridge passed this two-computer cycle; the new bundled bridge has only native macOS initialization and protocol tests so far.
+2. Test the bundled Steam bridge between macOS and Windows with separate signed-in Steam accounts. The old external e4steam bridge passed this two-computer cycle. The new bundled bridge has passed native macOS initialization, protocol tests and a real Minecraft host publishing its Steam address and saving back to GitHub; a second Steam account has not connected to it yet.
 3. Steam App ID 480 is for development testing. A public release needs the applicable Valve agreement and a production App ID.
 
 ## Installation and intended flow
@@ -54,6 +54,8 @@ JAVA_HOME=/path/to/jdk-25 ./gradlew test build
 ```
 
 GitHub Actions runs unit tests and builds on macOS and Windows. Tests cover binary Git synchronization, locks, simultaneous starts, interrupted uploads, checkpoints, crash recovery, signed rules/saves, rollback, key validation, invite boundaries and the bundled Steam wire/native-buffer handling.
+
+The `0.2.0-alpha.1` implementation passed both operating-system jobs in [GitHub Actions run 36923232370](https://github.com/scroogem/hearth/actions/runs/36923232370). The live macOS two-client checks passed participant hosting, creator logout while a friend kept playing, signed game-rule enforcement, persisted world changes, recorded participants and creator-only rollback against private GitHub storage.
 
 Client drivers in `src/gametest` launch ordinary Minecraft instances to verify native creation/settings capture, signed peer login, host handoff, shutdown ownership, persisted world changes and GUI layouts at two scales. They are not packaged in the normal Hearth JAR. The existing client gametest additionally checks compatibility with external e4steam and legacy saves.
 

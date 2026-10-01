@@ -463,7 +463,9 @@ public final class HearthClient implements ClientModInitializer {
 				owner.accesses().add(new GrantedAccess(key.deployKeyId(), policyKey.deployKeyId(), key.publicKey(), policyKey.publicKey(), name, false));
 				LocalSecrets.write(ownerFile(entry), GSON.toJson(owner));
 			} catch (Exception e) {
-				try { storage.revokeAccess(owner.repository(), key.deployKeyId()); storage.revokeAccess(owner.policyRepository(), policyKey.deployKeyId()); }
+				try { storage.revokeAccess(owner.repository(), key.deployKeyId()); }
+				catch (Exception revokeFailure) { e.addSuppressed(revokeFailure); }
+				try { storage.revokeAccess(owner.policyRepository(), policyKey.deployKeyId()); }
 				catch (Exception revokeFailure) { e.addSuppressed(revokeFailure); }
 				throw e;
 			}
