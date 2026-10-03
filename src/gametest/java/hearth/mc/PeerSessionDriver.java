@@ -87,8 +87,11 @@ public final class PeerSessionDriver implements ClientModInitializer {
 				if (policy != null && !policy.ownerUuid().equals(local.id())) {
 					if (server.isSingleplayerOwner(new net.minecraft.server.players.NameAndId(policy.ownerUuid(), "Creator")))
 						throw new IllegalStateException("Creator must not control another host's lifecycle");
-					if (!server.getProfilePermissions(local).equals(net.minecraft.server.permissions.LevelBasedPermissionSet.ALL))
-						throw new IllegalStateException("Hosting granted creator permissions");
+					var expected = policy.settings().cheats() || policy.settings().allowModeChanges()
+							? net.minecraft.server.permissions.LevelBasedPermissionSet.GAMEMASTER
+							: net.minecraft.server.permissions.LevelBasedPermissionSet.ALL;
+					if (!server.getProfilePermissions(local).equals(expected))
+						throw new IllegalStateException("Participant permissions differ from signed world rules");
 				}
 				if (players == 1 && guestJoinedAt > 0 && !survivedGuestExit) {
 					survivedGuestExit = true;
