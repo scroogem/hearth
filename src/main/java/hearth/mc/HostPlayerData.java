@@ -20,7 +20,7 @@ final class HostPlayerData {
 		Path steamPlayer = data.resolve(steamUuid + ".dat");
 		if (Files.exists(steamPlayer)) return;
 		if (Files.exists(oldPlayer)) {
-			var tag = NbtIo.readCompressed(oldPlayer, NbtAccounter.unlimitedHeap());
+			var tag = NbtIo.readCompressed(oldPlayer, NbtAccounter.create(16 * 1024 * 1024));
 			tag.store("UUID", UUIDUtil.CODEC, steamUuid);
 			NbtIo.writeCompressed(tag, steamPlayer);
 		}
