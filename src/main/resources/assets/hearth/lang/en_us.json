@@ -39,7 +39,7 @@
   "hearth.github_create": "Create a shared world",
   "hearth.github_sign_in": "Sign in to GitHub",
   "hearth.github_open": "Copy code and open GitHub",
-  "hearth.github_creator_help": "Only the creator signs in. Hearth creates a private repository and separate access keys for friends. GitHub asks for private repository access; this login stays on your computer.",
+  "hearth.github_creator_help": "Only the creator signs in. Hearth creates a private repository and separate access keys for friends. GitHub asks to read and write all private repositories; this login stays on your computer.",
   "hearth.creating_invite": "Creating a private invite…",
   "hearth.invite_private": "Invite copied. Send it privately to one friend: it gives access to this world. Each invite can be revoked separately.",
   "hearth.access": "World access",

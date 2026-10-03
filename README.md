@@ -4,6 +4,8 @@ A Fabric client mod for Minecraft Java 26.2. The person playing hosts the shared
 
 ## Current development build
 
+`0.2.0-alpha.2` includes the registered public GitHub OAuth client ID. Creator device-code sign-in, token refresh without an application secret, native world creation/upload and UI invitation creation have passed against real GitHub storage.
+
 - Native Minecraft screens: create a world, share an existing world, paste an invite, then use **Play** to host or join.
 - Creator signs in to GitHub once. Friends receive separate world SSH deploy keys and do not need GitHub accounts. The creator's account token stays on their PC and is excluded from invites.
 - Private world storage and a separate private repository for creator-signed rules. Friends can read rules, but their GitHub keys cannot write them.
@@ -18,15 +20,12 @@ A Fabric client mod for Minecraft Java 26.2. The person playing hosts the shared
 
 This is a development build, not a completed public release:
 
-1. Register the native GitHub OAuth app and include its public client ID. Creator sign-in is currently unconfigured. Real SSH world storage and account-free guest access have been tested independently.
-2. Test the bundled Steam bridge between macOS and Windows with separate signed-in Steam accounts. The old external e4steam bridge passed this two-computer cycle. The new bundled bridge has passed native macOS initialization, protocol tests and a real Minecraft host publishing its Steam address and saving back to GitHub; a second Steam account has not connected to it yet.
-3. Steam App ID 480 is for development testing. A public release needs the applicable Valve agreement and a production App ID.
+1. Test the bundled Steam bridge between macOS and Windows with separate signed-in Steam accounts. The old external e4steam bridge passed this two-computer cycle. The new bundled bridge has passed native macOS initialization, protocol tests and a real Minecraft host publishing its Steam address and saving back to GitHub; a second Steam account has not connected to it yet.
+2. Steam App ID 480 is for development testing. A public release needs the applicable Valve agreement and a production App ID.
 
 ## Installation and intended flow
 
 Use Minecraft 26.2, Java 25 or newer, Fabric Loader 0.19.5 or newer, Fabric API and the Hearth JAR in the same profile. Use the same approved world mod versions on every computer. The JAR supports macOS x64/arm64 and Windows x64. Windows ARM and older Minecraft versions are not supported by this build.
-
-After the creator sign-in release gate is resolved:
 
 1. Open **Singleplayer → Shared worlds → Add a world**. Choose an existing world or **Create new world**, using Minecraft's native creation screen.
 2. The creator signs in to GitHub using the displayed device code, then creates the shared world. Hearth prepares private repositories and starts the world.
@@ -57,6 +56,6 @@ GitHub Actions runs unit tests and builds on macOS and Windows. Tests cover bina
 
 The `0.2.0-alpha.1` implementation passed both operating-system jobs in [GitHub Actions run 36923232370](https://github.com/scroogem/hearth/actions/runs/36923232370). The live macOS two-client checks passed participant hosting, creator logout while a friend kept playing, signed game-rule enforcement, persisted world changes, recorded participants and creator-only rollback against private GitHub storage.
 
-Client drivers in `src/gametest` launch ordinary Minecraft instances to verify native creation/settings capture, signed peer login, host handoff, shutdown ownership, persisted world changes and GUI layouts at two scales. They are not packaged in the normal Hearth JAR. The existing client gametest additionally checks compatibility with external e4steam and legacy saves.
+Client drivers in `src/gametest` launch ordinary Minecraft instances to verify native creation/settings capture, GitHub device-code UI, shared-world creation and separate invitation keys, signed peer login, host handoff, shutdown ownership, persisted world changes and GUI layouts at two scales. They are not packaged in the normal Hearth JAR. The existing client gametest additionally checks compatibility with external e4steam and legacy saves.
 
 See [native UI review](docs/native-ui-review.md) and [third party notices](THIRD_PARTY_NOTICES.md).
