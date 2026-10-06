@@ -87,7 +87,7 @@ public final class PeerSessionDriver implements ClientModInitializer {
 				if (policy != null && !policy.ownerUuid().equals(local.id())) {
 					if (server.isSingleplayerOwner(new net.minecraft.server.players.NameAndId(policy.ownerUuid(), "Creator")))
 						throw new IllegalStateException("Creator must not control another host's lifecycle");
-					var expected = policy.settings().cheats() || policy.settings().allowModeChanges()
+                    var expected = policy.canUseCommands(local.id()) || policy.settings().allowModeChanges()
 							? net.minecraft.server.permissions.LevelBasedPermissionSet.GAMEMASTER
 							: net.minecraft.server.permissions.LevelBasedPermissionSet.ALL;
 					if (!server.getProfilePermissions(local).equals(expected))

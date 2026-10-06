@@ -89,7 +89,7 @@ final class WorldHistoryScreen extends Screen {
                 String end = visit.leftAt() > 0 ? DATE.format(Instant.ofEpochMilli(visit.leftAt()))
                         : save.activity().endedAt() > 0 ? DATE.format(Instant.ofEpochMilli(save.activity().endedAt())) : "…";
                 addRenderableWidget(new StringWidget(x, y, 300, 12, Component.literal(visit.player().name() + " · " + DATE.format(Instant.ofEpochMilli(visit.joinedAt())) + " — " + end), font).setMaxWidth(300));
-                addRenderableWidget(new StringWidget(x, y + 14, 300, 12, Component.literal(visit.ip() == null ? visit.player().id() : visit.ip()), font).setMaxWidth(300));
+                if (HearthClient.isOwner(entry)) addRenderableWidget(new StringWidget(x, y + 14, 300, 12, Component.literal(visit.ip() == null ? visit.player().id() : visit.ip()), font).setMaxWidth(300));
                 y += 36;
             }
             Button previous = addRenderableWidget(Button.builder(Component.translatable("hearth.previous"), b -> { page--; rebuildWidgets(); }).bounds(x, height - 84, 146, 20).build()); previous.active = page > 0;

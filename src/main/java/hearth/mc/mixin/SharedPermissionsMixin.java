@@ -18,7 +18,7 @@ public abstract class SharedPermissionsMixin {
         var member = policy.member(profile.id());
         callback.setReturnValue(member == null || member.banned() ? LevelBasedPermissionSet.ALL
                 : profile.id().equals(policy.ownerUuid()) ? LevelBasedPermissionSet.OWNER
-                : policy.settings().cheats() || policy.settings().allowModeChanges() ? LevelBasedPermissionSet.GAMEMASTER
+                : policy.canUseCommands(profile.id()) || policy.settings().allowModeChanges() ? LevelBasedPermissionSet.GAMEMASTER
                 : LevelBasedPermissionSet.ALL);
     }
 }

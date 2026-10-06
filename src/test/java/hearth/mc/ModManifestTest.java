@@ -23,5 +23,9 @@ class ModManifestTest {
         assertThrows(IOException.class, () -> ModManifest.verify(clientAllowed,
                 Map.of("worldmod", "shared:1", "extra", "shared:1")));
         assertThrows(IOException.class, () -> ModManifest.verify(clientAllowed, Map.of("shader", "client:1")));
+        var pinned = clientAllowed.withMods(Map.of("hearth", "shared:0.2.0-alpha.3", "worldmod", "shared:1"));
+        ModManifest.verify(pinned, Map.of("hearth", "shared:0.2.0-alpha.3", "worldmod", "shared:1", "shader", "client:2"));
+        assertThrows(IOException.class, () -> ModManifest.verify(pinned, Map.of("hearth", "client:0.2.0-alpha.2", "worldmod", "shared:1")));
+        assertThrows(IOException.class, () -> ModManifest.verify(pinned, Map.of("worldmod", "shared:1")));
     }
 }

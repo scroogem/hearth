@@ -14,6 +14,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.SharedConstants;
@@ -105,6 +106,7 @@ public final class HearthClient implements ClientModInitializer {
 	public void onInitializeClient() {
 		HearthLogin.register();
 		WorldRules.register();
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, mc) -> { joiningEntry = null; joiningPolicy = null; });
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
 			Session active = session;
 			if (active == null) return;
@@ -124,10 +126,10 @@ public final class HearthClient implements ClientModInitializer {
 				Screens.getWidgets(screen).add(Button.builder(Component.translatable("hearth.shared_worlds"),
 						b -> mc.gui.setScreen(new SharedWorldsScreen(screen))).bounds(width - 130, 6, 124, 20).build());
 			}
-			if (screen instanceof net.minecraft.client.gui.screens.PauseScreen && session != null) {
-				var active = session;
+			Entry activeEntry = session != null ? session.entry() : mc.level != null ? joiningEntry : null;
+			if (screen instanceof net.minecraft.client.gui.screens.PauseScreen && activeEntry != null) {
 				Screens.getWidgets(screen).add(Button.builder(Component.translatable("hearth.shared_worlds"),
-						b -> mc.gui.setScreen(new WorldDetailsScreen(active.entry(), screen))).bounds(width - 130, 6, 124, 20).build());
+						b -> mc.gui.setScreen(new WorldDetailsScreen(activeEntry, screen))).bounds(width - 130, 6, 124, 20).build());
 			}
 		});
 		ClientTickEvents.END_CLIENT_TICK.register(mc -> {
@@ -270,7 +272,14 @@ public final class HearthClient implements ClientModInitializer {
 	}
 
 	static Path ownerFile(Entry entry) { return gameDir().resolve("hearth/owners/" + entry.folder() + ".json"); }
-	static boolean isOwner(Entry entry) { return Files.isRegularFile(ownerFile(entry)); }
+	static boolean isOwner(Entry entry) {
+		return entry.remote().trust() != null && entry.remote().ssh() != null
+				&& entry.remote().trust().ownerKey().equals(entry.remote().ssh().publicKey()) && Files.isRegularFile(ownerFile(entry));
+	}
+	static WorldPolicy cachedPolicy(Entry entry) {
+		Session active = session;
+		return active != null && active.entry().equals(entry) ? active.policy().get() : entry.equals(joiningEntry) ? joiningPolicy : null;
+	}
 	record GrantedAccess(long keyId, long policyKeyId, String publicKey, String policyPublicKey, String name, boolean banned) {}
 	record Owner(GitHubStorage.Repository repository, GitHubStorage.Repository policyRepository, List<GrantedAccess> accesses) {}
 
@@ -381,17 +390,25 @@ public final class HearthClient implements ClientModInitializer {
 	}
 
 	static void updateRules(Entry entry, java.util.function.UnaryOperator<WorldPolicy> update, Screen back) {
+		updateRules(entry, update, back, back);
+	}
+
+	static void updateRules(Entry entry, java.util.function.UnaryOperator<WorldPolicy> update, Screen success, Screen failure) {
 		Minecraft.getInstance().gui.setScreen(new GenericMessageScreen(Component.translatable("hearth.updating_rules")));
 		async(() -> {
 			try (var store = new PolicyStore(gitDir(entry).resolve("policy.git"), entry.remote().trust().policyUrl(), entry.remote().trust().policyAccess())) {
 				var changed = update.apply(store.load(entry.remote().trust()));
+				// A signed permission change must not be hosted by a version that ignores that permission.
+				var mods = new java.util.TreeMap<>(changed.mods());
+				mods.put("hearth", ModManifest.current().get("hearth"));
+				changed = new WorldPolicy(changed.worldId(), changed.ownerKey(), changed.revision(), changed.settings(), changed.members(), changed.bannedIps(), mods);
 				WorldRules.validate(changed.settings());
 				store.publish(changed, entry.remote().ssh());
 				var active = session;
 				if (active != null && active.entry().equals(entry)) active.policy().set(changed);
 			}
 			return null;
-		}).whenComplete((value, error) -> done(error, back));
+		}).whenComplete((value, error) -> done(error, error == null ? success : failure));
 	}
 
 	static void restoreSave(Entry entry, String commit, Screen back) {
@@ -437,6 +454,10 @@ public final class HearthClient implements ClientModInitializer {
 	}
 
 	static void createInvite(Entry entry, Screen back) {
+		Minecraft.getInstance().gui.setScreen(new WorldAccessScreen.InviteScreen(entry, back));
+	}
+
+	static void createInvite(Entry entry, String name, Screen back) {
 		if (entry.remote().ssh() == null) {
 			Minecraft.getInstance().keyboardHandler.setClipboard(new Invite(entry.name(), entry.remote()).encode());
 			return;
@@ -445,7 +466,7 @@ public final class HearthClient implements ClientModInitializer {
 		async(() -> {
 			if (!isOwner(entry)) throw new IOException("Only the world creator can issue new invites");
 			Owner owner = GSON.fromJson(Files.readString(ownerFile(entry)), Owner.class);
-			String name = "Guest " + (owner.accesses().size() + 1);
+			if (name == null || name.isBlank() || name.length() > 64 || name.chars().anyMatch(Character::isISOControl)) throw new IOException("Enter a name for your friend");
 			GitHubStorage storage = storage();
 			var key = storage.createAccess(owner.repository(), name);
 			hearth.core.GitSsh.Access policyKey;
@@ -458,7 +479,10 @@ public final class HearthClient implements ClientModInitializer {
 			try {
 				try (var rules = new PolicyStore(gitDir(entry).resolve("policy.git"), entry.remote().trust().policyUrl(), entry.remote().trust().policyAccess())) {
 					var policy = rules.load(entry.remote().trust());
-					rules.publish(policy.addMember(key, name), entry.remote().ssh());
+					var changed = policy.addMember(key, name);
+					rules.publish(changed, entry.remote().ssh());
+					var active = session;
+					if (active != null && active.entry().equals(entry)) active.policy().set(changed);
 				}
 				owner.accesses().add(new GrantedAccess(key.deployKeyId(), policyKey.deployKeyId(), key.publicKey(), policyKey.publicKey(), name, false));
 				LocalSecrets.write(ownerFile(entry), GSON.toJson(owner));
@@ -511,16 +535,22 @@ public final class HearthClient implements ClientModInitializer {
 	}
 
 	static void addInvite(String text, Screen back) {
+		addInvite(text, back, back);
+	}
+
+	static void addInvite(String text, Screen success, Screen failure) {
 		Minecraft mc = Minecraft.getInstance();
 		Invite invite;
 		try {
 			invite = Invite.decode(text);
 		} catch (RuntimeException e) {
-			mc.gui.setScreen(new AlertScreen(() -> mc.gui.setScreen(back), Component.translatable("hearth.error"), Component.literal(e.getMessage())));
+			mc.gui.setScreen(new AlertScreen(() -> mc.gui.setScreen(failure), Component.translatable("hearth.error"), Component.translatable("hearth.invalid_invite")));
 			return;
 		}
 		mc.gui.setScreen(new GenericMessageScreen(Component.translatable("hearth.downloading")));
 		async(() -> {
+			if (entries().stream().anyMatch(e -> e.remote().url().equals(invite.remote().url())))
+				throw new IOException(Component.translatable("hearth.already_added").getString());
 			String base = invite.name().replaceAll("[^\\p{L}\\p{N} _-]", "_").strip();
 			if (base.isEmpty()) base = "Shared world";
 			String folder = base;
@@ -531,7 +561,7 @@ public final class HearthClient implements ClientModInitializer {
 			SharedWorld.cloneInto(gitDir(entry), savesDir().resolve(folder), invite.remote()).close();
 			addEntry(entry);
 			return null;
-		}).whenComplete((v, t) -> done(t, back));
+		}).whenComplete((v, t) -> done(t, t == null ? success : failure));
 	}
 
 	/** Recheck the live status when Play is pressed; screen snapshots can be out of date. */
@@ -573,7 +603,13 @@ public final class HearthClient implements ClientModInitializer {
 
 	private static void waitForHost(Entry entry, Screen back, int attempt) {
 		Minecraft mc = Minecraft.getInstance();
-		Screen waiting = new GenericMessageScreen(Component.translatable("hearth.waiting_host"));
+		Screen waiting = new Screen(Component.translatable("hearth.waiting_host")) {
+			@Override protected void init() {
+				addRenderableWidget(new net.minecraft.client.gui.components.StringWidget((width - font.width(title)) / 2, height / 2 - 20, font.width(title), 20, title, font));
+				addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> onClose()).bounds(width / 2 - 100, height / 2 + 12, 200, 20).build());
+			}
+			@Override public void onClose() { minecraft.gui.setScreen(back); }
+		};
 		mc.gui.setScreen(waiting);
 		GIT.schedule(() -> {
 			if (mc.gui.screen() != waiting) return;
@@ -786,7 +822,13 @@ public final class HearthClient implements ClientModInitializer {
 				world.release(s.lock());
 			}
 			return null;
-		}).whenComplete((v, t) -> done(t, new SharedWorldsScreen(new SelectWorldScreen(new net.minecraft.client.gui.screens.TitleScreen()))));
+		}).whenComplete((v, t) -> {
+			Screen next = new SharedWorldsScreen(new SelectWorldScreen(new net.minecraft.client.gui.screens.TitleScreen()));
+			Throwable cause = t instanceof java.util.concurrent.CompletionException && t.getCause() != null ? t.getCause() : t;
+			if (cause != null && !(cause instanceof SharedWorld.LostLockException))
+				mc.gui.setScreen(new AlertScreen(() -> mc.gui.setScreen(next), Component.translatable("hearth.error"), Component.translatable("hearth.save_failed", String.valueOf(cause.getMessage()))));
+			else done(t, next);
+		});
 	}
 
 	private static void done(Throwable t, Screen next) {

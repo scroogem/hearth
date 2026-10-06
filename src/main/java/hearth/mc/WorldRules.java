@@ -113,7 +113,10 @@ public final class WorldRules {
             String value = policy.settings().gameRules().get(rule.id());
             if (value != null) applyRule(server, rule, value);
         });
-        if (policy != applied) for (ServerPlayer player : server.getPlayerList().getPlayers()) server.getPlayerList().sendPlayerPermissionLevel(player);
+        if (policy != applied) for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            server.getPlayerList().sendPlayerPermissionLevel(player);
+            server.getCommands().sendCommands(player);
+        }
         applied = policy;
     }
 
@@ -127,5 +130,14 @@ public final class WorldRules {
         if (policy == null || player.getUUID().equals(policy.ownerUuid())) return true;
         return (mode != GameType.CREATIVE || policy.settings().allowCreative())
                 && (policy.settings().allowModeChanges() || mode == GameType.byName(policy.settings().gameMode()));
+    }
+
+    public static boolean commandAllowed(net.minecraft.commands.CommandSourceStack source, com.mojang.brigadier.tree.CommandNode<net.minecraft.commands.CommandSourceStack> root) {
+        var policy = policy(source.getServer());
+        var player = source.getPlayer();
+        if (policy == null || player == null) return true;
+        if (java.util.Set.of("gamerule", "difficulty", "defaultgamemode").contains(root.getName())) return false;
+        return policy.canUseCommands(player.getUUID()) || policy.settings().allowModeChanges() && root.getName().equals("gamemode")
+                || root.getRequirement().test(source.withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.ALL));
     }
 }

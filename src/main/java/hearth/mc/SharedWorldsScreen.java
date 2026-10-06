@@ -109,6 +109,7 @@ public final class SharedWorldsScreen extends Screen {
 		SharedWorld.Status s = (SharedWorld.Status) st;
 		SharedWorld.Player holder = s.lock().holder();
 		if (holder == null) return Component.translatable("hearth.nobody").withStyle(ChatFormatting.GRAY);
+		if (HearthClient.session != null && HearthClient.session.entry().equals(entry)) return Component.translatable("hearth.you_host").withStyle(ChatFormatting.GREEN);
 		if (holder.id().equals(HearthClient.me(entry).id())) return Component.translatable("hearth.you_unsaved").withStyle(ChatFormatting.GOLD);
 		if (s.stale()) return Component.translatable("hearth.not_responding", holder.name()).withStyle(ChatFormatting.GOLD);
 		return Component.translatable("hearth.playing", holder.name()).withStyle(ChatFormatting.GREEN);
@@ -150,8 +151,10 @@ public final class SharedWorldsScreen extends Screen {
 			invite.setMaxLength(16384);
 			invite.setValue(typed);
 			invite.setHint(Component.literal("hearth1:…"));
-			addRenderableWidget(Button.builder(Component.translatable("hearth.add_button"), b -> HearthClient.addInvite(invite.getValue(), back))
+			Button add = addRenderableWidget(Button.builder(Component.translatable("hearth.add_button"), b -> HearthClient.addInvite(invite.getValue(), back, this))
 					.bounds(x + 228, 48, 72, 20).build());
+			add.active = !typed.isBlank();
+			invite.setResponder(text -> add.active = !text.isBlank());
 
 			addRenderableWidget(new StringWidget(x, 84, 300, 12, Component.translatable("hearth.share_own"), font));
 			Button selector = addRenderableWidget(Button.builder(folderLabel(), b -> {

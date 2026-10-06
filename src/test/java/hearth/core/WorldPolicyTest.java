@@ -23,6 +23,25 @@ class WorldPolicyTest {
         assertThrows(java.io.IOException.class, () -> invited.withSettings(invalid).sign(owner));
         assertEquals(invited, WorldPolicy.verify(invited.sign(owner), first.trust()));
         assertTrue(invited.canHost(WorldPolicy.identity(guest.publicKey())));
+        var guestId = WorldPolicy.identity(guest.publicKey());
+        assertFalse(invited.canUseCommands(guestId));
+        var promoted = invited.withMember(guest.publicKey(), "Friend renamed", true);
+        assertFalse(promoted.canUseCommands(guestId)); // The world command switch still applies to operators.
+        var s = promoted.settings();
+        var commands = promoted.withSettings(new WorldPolicy.Settings(s.gameMode(), s.difficulty(), s.allowCreative(), s.allowModeChanges(),
+                s.allowClientMods(), true, s.gameRules()));
+        assertTrue(commands.canUseCommands(guestId));
+        assertTrue(commands.canUseCommands(commands.ownerUuid()));
+        assertFalse(commands.withMember(guest.publicKey(), "Friend", false).canUseCommands(guestId));
+        assertFalse(commands.ban(guest.publicKey(), true).canUseCommands(guestId));
+        assertTrue(commands.ban(guest.publicKey(), true).ban(guest.publicKey(), false).member(guestId).operator());
+        assertEquals(commands, WorldPolicy.verify(commands.sign(owner), first.trust()));
+        assertThrows(java.io.IOException.class, () -> commands.sign(guest));
+        assertThrows(IllegalArgumentException.class, () -> commands.withMember(owner.publicKey(), "Creator", false));
+        String legacyPayload = invited.sign(owner).payload().replace(",\"operator\":false", "");
+        var legacy = WorldPolicy.verify(new WorldPolicy.Signed(legacyPayload, WorldPolicy.signBytes(owner,
+                legacyPayload.getBytes(java.nio.charset.StandardCharsets.UTF_8))), first.trust());
+        assertFalse(legacy.member(guestId).operator());
         assertThrows(java.io.IOException.class, () -> invited.sign(guest));
         var signed = invited.sign(owner);
 		byte[] nonce = new byte[32];

@@ -16,8 +16,15 @@ public final class UiReviewDriver implements ClientModInitializer {
     private Screen root;
     private String createdFolder;
     private int sharingStage;
+    private HearthClient.Entry guest;
+    private int memberStage;
+    private hearth.core.WorldPolicy.Member originalMember;
 
     @Override public void onInitializeClient() {
+        if (Boolean.getBoolean("hearth.ui.editMember")) {
+            ClientTickEvents.END_CLIENT_TICK.register(mc -> checkMemberEdit(mc));
+            return;
+        }
         if (Boolean.getBoolean("hearth.ui.create")) {
             ClientTickEvents.END_CLIENT_TICK.register(mc -> {
                 try {
@@ -58,16 +65,21 @@ public final class UiReviewDriver implements ClientModInitializer {
             if (root == null) {
                 if (!(mc.gui.screen() instanceof TitleScreen)) return;
                 entry = HearthClient.entries().getFirst();
+                if (Boolean.getBoolean("hearth.ui.roles")) try {
+                    guest = new com.google.gson.Gson().fromJson(java.nio.file.Files.readString(HearthClient.gameDir().resolve("hearth/review-guest.json")), HearthClient.Entry.class);
+                } catch (Exception e) { throw new RuntimeException(e); }
                 root = Boolean.getBoolean("hearth.ui.membersError") ? new WorldAccessScreen(entry, new TitleScreen())
                         : new SharedWorldsScreen(new TitleScreen());
                 mc.gui.setScreen(root);
             }
+            if (!ready(mc.gui.screen())) return;
+            int period = Integer.getInteger("hearth.ui.period", 240);
             ticks++;
-            if (ticks % 240 == 180) {
+            if (ticks % period == period * 3 / 4) {
                 var screen = mc.gui.screen();
                 for (var child : screen.children()) if (child instanceof net.minecraft.client.gui.components.StringWidget label
                         && label.getY() < 35 && label.getMessage().equals(screen.getTitle())
-                        && label.getX() != (screen.width - mc.font.width(screen.getTitle())) / 2)
+                        && label.getX() != (screen.width - label.getWidth()) / 2)
                     throw new AssertionError("Screen title is not centered");
                 var controls = screen.children().stream().filter(child -> child instanceof Button || child instanceof EditBox)
                         .map(child -> (AbstractWidget) child).toList();
@@ -82,8 +94,8 @@ public final class UiReviewDriver implements ClientModInitializer {
                 Screenshot.grab(mc.gameDirectory, "hearth-ui-" + page + ".png", mc.gameRenderer.mainRenderTarget(), 1, message -> {});
                 HearthClient.LOG.info("[ui-test] Captured {}", screen.getClass().getSimpleName());
             }
-            if (ticks % 240 == 0) {
-                Screen next = Boolean.getBoolean("hearth.ui.membersError") ? null : switch (++page) {
+            if (ticks % period == 0) {
+                Screen next = Boolean.getBoolean("hearth.ui.membersError") ? null : Boolean.getBoolean("hearth.ui.roles") ? roleScreen(++page, mc) : switch (++page) {
                     case 1 -> new WorldDetailsScreen(entry, root);
                     case 2 -> new WorldSettingsScreen(entry, root);
                     case 3 -> new WorldAccessScreen(entry, root);
@@ -96,6 +108,48 @@ public final class UiReviewDriver implements ClientModInitializer {
                 else { HearthClient.LOG.info("[ui-test] All native screens checked"); mc.stop(); }
             }
         });
+    }
+
+    private static boolean ready(Screen screen) {
+        String action = screen instanceof SharedWorldsScreen ? "hearth.play" : screen instanceof WorldSettingsScreen ? "hearth.game_rules"
+                : screen instanceof WorldAccessScreen ? "hearth.member_rights" : screen instanceof WorldHistoryScreen ? "hearth.session_details" : null;
+        return action == null || screen.children().stream().anyMatch(c -> c instanceof Button b && b.active
+                && b.getMessage().getString().equals(net.minecraft.network.chat.Component.translatable(action).getString()));
+    }
+
+    private void checkMemberEdit(net.minecraft.client.Minecraft mc) {
+        try {
+            Screen screen = mc.gui.screen();
+            if (memberStage == 0 && screen instanceof TitleScreen) {
+                entry = HearthClient.entries().getFirst(); memberStage = 1;
+                HearthClient.async(() -> { try (var world = HearthClient.open(entry)) {
+                    return world.policy().member(hearth.core.WorldPolicy.identity(HearthClient.owner(entry).accesses().getFirst().publicKey()));
+                } }).whenComplete((member, error) -> {
+                    if (error != null) throw new AssertionError(error);
+                    originalMember = member; mc.gui.setScreen(new WorldAccessScreen(entry, new TitleScreen())); memberStage = 2;
+                });
+            } else if (memberStage == 2 && screen instanceof WorldAccessScreen && screen.children().stream().anyMatch(c -> c instanceof Button b && b.active
+                    && b.getMessage().getString().equals(net.minecraft.network.chat.Component.translatable("hearth.member_rights").getString()))) {
+                press(screen, "hearth.member_rights"); memberStage = 3;
+            } else if (memberStage == 3 && screen.getClass().getSimpleName().equals("MemberScreen")) {
+                screen.children().stream().filter(c -> c instanceof EditBox).map(c -> (EditBox)c).findFirst().orElseThrow().setValue("Named through Hearth UI");
+                String off = net.minecraft.network.chat.Component.translatable("hearth.operator", net.minecraft.network.chat.Component.translatable("options.off")).getString();
+                screen.children().stream().filter(c -> c instanceof Button b && b.getMessage().getString().equals(off)).map(c -> (Button)c).findFirst().ifPresent(b -> b.onPress(null));
+                press(screen, "hearth.save_settings"); memberStage = 4;
+            } else if (memberStage == 4 && screen instanceof WorldAccessScreen) {
+                memberStage = 5;
+                HearthClient.async(() -> { try (var world = HearthClient.open(entry)) {
+                    var member = world.policy().member(originalMember.uuid());
+                    if (!member.operator() || !member.name().equals("Named through Hearth UI")) throw new AssertionError("Native member edit was not signed and persisted");
+                    return null;
+                } }).whenComplete((value, error) -> {
+                    if (error != null) throw new AssertionError(error);
+                    HearthClient.LOG.info("[ui-test] NATIVE_MEMBER_RENAME_AND_OPERATOR_SAVE_VERIFIED");
+                    HearthClient.updateRules(entry, policy -> policy.withMember(originalMember.publicKey(), originalMember.name(), originalMember.operator()), new TitleScreen());
+                    memberStage = 6;
+                });
+            } else if (memberStage == 6 && screen instanceof TitleScreen) { memberStage = 7; mc.stop(); }
+        } catch (Exception e) { throw new RuntimeException(e); }
     }
 
     private void checkSharing(net.minecraft.client.Minecraft mc) throws Exception {
@@ -133,6 +187,10 @@ public final class UiReviewDriver implements ClientModInitializer {
                 press(mc.gui.screen(), "hearth.invite"); sharingStage = 3;
             }
             case 3 -> {
+                if (screen instanceof WorldAccessScreen.InviteScreen) {
+                    screen.children().stream().filter(c -> c instanceof EditBox).map(c -> (EditBox)c).findFirst().orElseThrow().setValue("Named friend");
+                    press(screen, "hearth.create_invite"); return;
+                }
                 if (screen == null || !screen.getTitle().getString().equals(net.minecraft.network.chat.Component.translatable("hearth.copied").getString())) return;
                 String code = mc.keyboardHandler.getClipboard();
                 var invite = hearth.core.Invite.decode(code);
@@ -154,6 +212,47 @@ public final class UiReviewDriver implements ClientModInitializer {
                 HearthClient.LOG.info("[creation-test] SHARED_WORLD_UPLOADED_AND_RELEASED"); mc.stop(); sharingStage = 6;
             }
         }
+    }
+
+    private Screen roleScreen(int next, net.minecraft.client.Minecraft mc) {
+        return switch (next) {
+            case 1 -> new WorldDetailsScreen(entry, root);
+            case 2 -> new WorldSettingsScreen(entry, root);
+            case 3 -> { press(mc.gui.screen(), "hearth.game_rules"); checkRuleSearch(mc.gui.screen(), false); yield mc.gui.screen(); }
+            case 4 -> new WorldAccessScreen(entry, root);
+            case 5 -> { press(mc.gui.screen(), "hearth.member_rights"); yield mc.gui.screen(); }
+            case 6 -> new WorldAccessScreen.InviteScreen(entry, root);
+            case 7 -> new WorldAccessScreen(entry, root);
+            case 8 -> { press(mc.gui.screen(), "hearth.ip_bans"); yield mc.gui.screen(); }
+            case 9 -> new WorldHistoryScreen(entry, root);
+            case 10 -> { press(mc.gui.screen(), "hearth.session_details"); yield mc.gui.screen(); }
+            case 11 -> new WorldDetailsScreen(guest, root);
+            case 12 -> new WorldSettingsScreen(guest, root);
+            case 13 -> {
+                if (mc.gui.screen().children().stream().anyMatch(c -> c instanceof Button b && b.getMessage().getString().equals(net.minecraft.network.chat.Component.translatable("hearth.save_settings").getString())))
+                    throw new AssertionError("A participant can save creator settings");
+                press(mc.gui.screen(), "hearth.game_rules"); checkRuleSearch(mc.gui.screen(), true); yield mc.gui.screen();
+            }
+            case 14 -> new SharedWorldsScreen.AddWorldScreen(root);
+            case 15 -> new GitHubWorldScreen(entry.folder(), root);
+            default -> null;
+        };
+    }
+
+    private static void checkRuleSearch(Screen screen, boolean readOnly) {
+        var input = screen.children().stream().filter(c -> c instanceof EditBox).map(c -> (EditBox)c).findFirst().orElseThrow();
+        input.setValue("keep_inventory");
+        if (!screen.children().contains(input)) throw new AssertionError("Search recreated the native input and lost its caret");
+        var on = net.minecraft.network.chat.Component.translatable("options.on").getString();
+        var off = net.minecraft.network.chat.Component.translatable("options.off").getString();
+        var toggle = screen.children().stream().filter(c -> c instanceof Button b && (b.getMessage().getString().equals(on) || b.getMessage().getString().equals(off)))
+                .map(c -> (Button)c).findFirst().orElseThrow();
+        if (toggle.active == readOnly) throw new AssertionError("Wrong game-rule edit permission");
+        if (!readOnly) {
+            String previous = toggle.getMessage().getString(); toggle.onPress(null);
+            if (toggle.getMessage().getString().equals(previous)) throw new AssertionError("Boolean game-rule toggle failed");
+        }
+        HearthClient.LOG.info("[ui-test] RULE_SEARCH_AND_BOOLEAN_PERMISSION_VERIFIED readOnly={}", readOnly);
     }
 
     private static void press(Screen screen, String translation) {

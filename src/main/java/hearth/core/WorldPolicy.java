@@ -17,7 +17,8 @@ public record WorldPolicy(String worldId, String ownerKey, long revision, Settin
     public record Trust(String worldId, String ownerKey, String policyUrl, GitSsh.Access policyAccess) {
         public Trust(String worldId, String ownerKey) { this(worldId, ownerKey, null, null); }
     }
-    public record Member(String publicKey, String name, boolean canHost, boolean banned) {
+    public record Member(String publicKey, String name, boolean canHost, boolean banned, boolean operator) {
+        public Member(String publicKey, String name, boolean canHost, boolean banned) { this(publicKey, name, canHost, banned, false); }
         public UUID uuid() { return identity(publicKey); }
     }
     public record Settings(String gameMode, String difficulty, boolean allowCreative, boolean allowModeChanges, boolean allowClientMods,
@@ -44,6 +45,11 @@ public record WorldPolicy(String worldId, String ownerKey, long revision, Settin
         return member != null && !member.banned() && member.canHost();
     }
 
+    public boolean canUseCommands(UUID uuid) {
+        Member member = member(uuid);
+        return member != null && !member.banned() && (ownerUuid().equals(uuid) || settings.cheats() && member.operator());
+    }
+
     public static WorldPolicy initial(GitSsh.Access owner, String name, Map<String, String> mods) {
         return new WorldPolicy(UUID.randomUUID().toString(), owner.publicKey(), 1, Settings.defaults(),
                 List.of(new Member(owner.publicKey(), name, true, false)), List.of(), new TreeMap<>(mods));
@@ -61,7 +67,17 @@ public record WorldPolicy(String worldId, String ownerKey, long revision, Settin
         if (members.stream().noneMatch(m -> m.publicKey().equals(publicKey))) throw new IllegalArgumentException("Unknown member");
         return new WorldPolicy(worldId, ownerKey, revision + 1, settings,
                 members.stream().map(m -> m.publicKey().equals(publicKey)
-                        ? new Member(m.publicKey(), m.name(), m.canHost(), banned) : m).toList(), bannedIps, mods);
+                        ? new Member(m.publicKey(), m.name(), m.canHost(), banned, m.operator()) : m).toList(), bannedIps, mods);
+    }
+
+    public WorldPolicy withMember(String publicKey, String name, boolean operator) {
+        if (ownerKey.equals(publicKey)) throw new IllegalArgumentException("The creator's role cannot be changed");
+        if (name == null || name.isBlank() || name.length() > 64 || name.chars().anyMatch(Character::isISOControl))
+            throw new IllegalArgumentException("Enter a member name (1–64 characters)");
+        if (members.stream().noneMatch(m -> m.publicKey().equals(publicKey))) throw new IllegalArgumentException("Unknown member");
+        return new WorldPolicy(worldId, ownerKey, revision + 1, settings,
+                members.stream().map(m -> m.publicKey().equals(publicKey)
+                        ? new Member(m.publicKey(), name.strip(), m.canHost(), m.banned(), operator) : m).toList(), bannedIps, mods);
     }
 
     public WorldPolicy withSettings(Settings settings) {

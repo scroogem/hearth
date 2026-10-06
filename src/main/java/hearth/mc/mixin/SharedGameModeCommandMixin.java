@@ -17,6 +17,12 @@ public abstract class SharedGameModeCommandMixin {
         var policy = WorldRules.policy(source.getServer());
         var actor = source.getPlayer();
         if (policy != null && actor != null && !policy.ownerUuid().equals(actor.getUUID())
-                && !policy.settings().cheats() && actor != target) callback.setReturnValue(false);
+                && !policy.canUseCommands(actor.getUUID()) && actor != target) {
+            source.sendFailure(net.minecraft.network.chat.Component.translatable("hearth.self_mode_only"));
+            callback.setReturnValue(false);
+        } else if (!WorldRules.modeAllowed(target, mode)) {
+            source.sendFailure(net.minecraft.network.chat.Component.translatable("hearth.mode_disabled"));
+            callback.setReturnValue(false);
+        }
     }
 }

@@ -4,7 +4,7 @@
 	"version": "1",
 	"environment": "client",
 	"entrypoints": {
-		"client": ["hearth.mc.PeerSessionDriver", "hearth.mc.UiReviewDriver"],
+		"client": ["hearth.mc.PeerSessionDriver", "hearth.mc.UiReviewDriver", "hearth.mc.RoleReviewDriver"],
 		"fabric-client-gametest": ["hearth.mc.HearthGameTest"]
 	},
 	"depends": { "hearth": "*" }
