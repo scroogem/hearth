@@ -8,6 +8,7 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.AlertScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import java.nio.file.Path;
 
 final class WorldAccessScreen extends Screen {
     private final HearthClient.Entry entry;
@@ -109,11 +110,39 @@ final class WorldAccessScreen extends Screen {
             name = addRenderableWidget(new EditBox(font, x, 56, 300, 20, Component.translatable("hearth.member_name")));
             name.setMaxLength(64); name.setValue(typed); name.setHint(Component.translatable("hearth.member_name_hint"));
             addRenderableWidget(new MultiLineTextWidget(x, 88, Component.translatable("hearth.named_invite_help"), font).setMaxWidth(300));
-            Button invite = addRenderableWidget(Button.builder(Component.translatable("hearth.create_invite"), b -> HearthClient.createInvite(entry, name.getValue().strip(), back))
+            Button invite = addRenderableWidget(Button.builder(Component.translatable("hearth.create_invite"), b -> HearthClient.createInvite(entry, name.getValue().strip(), back, this))
                     .bounds(x, height - 56, 300, 20).build());
             invite.active = !typed.isBlank(); name.setResponder(value -> invite.active = !value.isBlank());
             addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> onClose()).bounds(x, height - 28, 300, 20).build());
             setInitialFocus(name);
+        }
+        @Override public void onClose() { minecraft.gui.setScreen(back); }
+    }
+
+    static final class InviteResultScreen extends Screen {
+        private final String code, name;
+        private final Screen back;
+        private final Path file;
+        private boolean saved;
+        InviteResultScreen(String code, String name, Screen back) {
+            super(Component.translatable("hearth.copied")); this.code = code; this.name = name; this.back = back;
+            file = HearthClient.gameDir().resolve("hearth/invites/Hearth-" + name.replaceAll("[^\\p{L}\\p{N}_-]", "_") + "-" + java.util.UUID.randomUUID() + ".txt");
+        }
+        @Override protected void init() {
+            int x = width / 2 - 150;
+            addRenderableWidget(new StringWidget((width - font.width(title)) / 2, 12, font.width(title), 20, title, font));
+            addRenderableWidget(new StringWidget(x, 40, 300, 12, Component.literal(name), font).setMaxWidth(300));
+            addRenderableWidget(new MultiLineTextWidget(x, 62, Component.translatable("hearth.invite_file_help"), font).setMaxWidth(300));
+            if (saved) addRenderableWidget(new StringWidget(x, height - 112, 300, 20, Component.translatable("hearth.invite_file_saved"), font));
+            addRenderableWidget(Button.builder(Component.translatable("hearth.copy_invite"), b -> minecraft.keyboardHandler.setClipboard(code))
+                    .bounds(x, height - 84, 300, 20).build());
+            addRenderableWidget(Button.builder(Component.translatable(saved ? "hearth.open_invite_folder" : "hearth.save_invite_file"), b -> {
+                if (saved) { net.minecraft.util.Util.getPlatform().openPath(file.getParent()); return; }
+                try { hearth.core.LocalSecrets.write(file, code); saved = true; rebuildWidgets(); }
+                catch (java.io.IOException e) { minecraft.gui.setScreen(new AlertScreen(() -> minecraft.gui.setScreen(this),
+                        Component.translatable("hearth.error"), Component.translatable("hearth.invite_file_save_failed"))); }
+            }).bounds(x, height - 56, 300, 20).build());
+            addRenderableWidget(Button.builder(Component.translatable("gui.back"), b -> onClose()).bounds(x, height - 28, 300, 20).build());
         }
         @Override public void onClose() { minecraft.gui.setScreen(back); }
     }

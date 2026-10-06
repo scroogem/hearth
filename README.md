@@ -4,9 +4,9 @@ A Fabric client mod for Minecraft Java 26.2. The person playing hosts the shared
 
 ## Current development build
 
-`0.2.0-alpha.3` includes the registered public GitHub OAuth client ID. Creator device-code sign-in, token refresh without an application secret, native world creation/upload and UI invitation creation have passed against real GitHub storage.
+`0.2.0-alpha.4` includes the registered public GitHub OAuth client ID. Creator device-code sign-in, token refresh without an application secret, native world creation/upload and UI invitation creation have passed against real GitHub storage.
 
-- Native Minecraft screens: create a world, share an existing world, paste an invite, then use **Play** to host or join.
+- Native Minecraft screens: create a world, share an existing world, paste an invite or drop its text file, then use **Play** to host or join.
 - Creator signs in to GitHub once. Friends receive separate world SSH deploy keys and do not need GitHub accounts. The creator's account token stays on their PC and is excluded from invites.
 - Private world storage and a separate private repository for creator-signed rules. Friends can read rules, but their GitHub keys cannot write them.
 - Signed participant login, stable per-world profiles, inventories and statistics across host changes. Both official and offline launcher identities use the same Hearth invitation profile.
@@ -30,7 +30,7 @@ Use Minecraft 26.2, Java 25 or newer, Fabric Loader 0.19.5 or newer, Fabric API 
 
 1. Open **Singleplayer → Shared worlds → Add a world**. Choose an existing world or **Create new world**, using Minecraft's native creation screen.
 2. The creator signs in to GitHub using the displayed device code, then creates the shared world. Hearth prepares private repositories and starts the world.
-3. Open the world's details, name the friend and copy an invite, and send it privately to a friend. Friends paste it under **Add a world**, then press **Play**. Issue a separate invite to each participant.
+3. Open the world's details, name the friend and create an invite. Use **Save invite as a file → Open folder with invite** and send that file privately. Friends drop it into **Add a world** and press **Add**, then **Play**. Pasting the full invite code also works. Issue a separate invite to each participant.
 4. Keep the desktop Steam app signed in for internet connections, or select local network on the host for computers on the same network.
 5. Leave the world and wait for the upload to finish before shutting down. Any invited participant can start the next session with the latest uploaded save.
 6. The creator uses **Settings**, **Access** and **History → Save details → Restore** in world details. World details are available from every participant’s pause menu. Assign operators and rename members under **Members and permissions**; enable **Operator commands** in world settings to let them use commands. The creator always retains full authority.

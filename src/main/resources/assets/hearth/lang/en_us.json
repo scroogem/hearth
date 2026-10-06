@@ -123,5 +123,13 @@
   "hearth.mod_required": "Install %s version %s to join this world.",
   "hearth.mod_not_approved": "The creator has not approved %s. Remove it or ask the creator to approve the new mod set.",
   "hearth.find_rule": "Find a game rule…",
-  "hearth.rules_not_found": "No matching game rules"
+  "hearth.rules_not_found": "No matching game rules",
+  "hearth.drop_invite": "Or drop an invite file here",
+  "hearth.copy_invite": "Copy invite again",
+  "hearth.save_invite_file": "Save invite as a file",
+  "hearth.open_invite_folder": "Open folder with invite",
+  "hearth.invite_file_saved": "Invite file saved",
+  "hearth.invite_file_help": "Send the file privately to this friend. They can drop it into Add world and press Add. The invite gives access to this world.",
+  "hearth.invite_file_invalid": "Drop one Hearth invite text file. It must contain the full code starting with hearth1:. Your previous text is still in the field.",
+  "hearth.invite_file_save_failed": "Could not save the invite file. Try again or use Copy invite again; the invite is still available here."
 }

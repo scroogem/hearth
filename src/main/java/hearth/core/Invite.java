@@ -5,6 +5,10 @@ import com.google.gson.Gson;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.net.URI;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.LinkOption;
 
 /** Everything a friend needs to add a shared world, as one string to paste into a chat. */
 public record Invite(String name, SharedWorld.Remote remote) {
@@ -49,6 +53,20 @@ public record Invite(String name, SharedWorld.Remote remote) {
 			}
 		}
 		return invite;
+	}
+
+	/** Read a user-selected invite without loading an unbounded file into memory. */
+	public static String readFile(Path file) throws IOException {
+		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Choose an invite file");
+		try (var input = Files.newInputStream(file)) {
+			byte[] bytes = input.readNBytes(65537);
+			if (bytes.length > 65536) throw new IOException("Invite file is too large");
+			String code = new String(bytes, StandardCharsets.UTF_8).strip();
+			if (code.startsWith("\uFEFF")) code = code.substring(1).strip();
+			try { decode(code); }
+			catch (RuntimeException e) { throw new IOException("Not a Hearth invite file"); }
+			return code;
+		}
 	}
 
 	@Override public String toString() { return "Invite[name=" + name + ", access=<redacted>]"; }

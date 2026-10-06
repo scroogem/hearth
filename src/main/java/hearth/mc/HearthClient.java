@@ -457,9 +457,9 @@ public final class HearthClient implements ClientModInitializer {
 		Minecraft.getInstance().gui.setScreen(new WorldAccessScreen.InviteScreen(entry, back));
 	}
 
-	static void createInvite(Entry entry, String name, Screen back) {
+	static void createInvite(Entry entry, String name, Screen back, Screen failureScreen) {
 		if (entry.remote().ssh() == null) {
-			Minecraft.getInstance().keyboardHandler.setClipboard(new Invite(entry.name(), entry.remote()).encode());
+			showInvite(new Invite(entry.name(), entry.remote()).encode(), name, back);
 			return;
 		}
 		Minecraft.getInstance().gui.setScreen(new GenericMessageScreen(Component.translatable("hearth.creating_invite")));
@@ -496,12 +496,15 @@ public final class HearthClient implements ClientModInitializer {
 			var trust = new WorldPolicy.Trust(entry.remote().trust().worldId(), entry.remote().trust().ownerKey(), owner.policyRepository().sshUrl(), policyKey);
 			return new Invite(entry.name(), new SharedWorld.Remote(owner.repository().sshUrl(), "git", null, key, trust)).encode();
 		}).whenComplete((code, t) -> {
-			if (t != null) { done(t, back); return; }
-			Minecraft mc = Minecraft.getInstance();
-			mc.keyboardHandler.setClipboard(code);
-			mc.gui.setScreen(new AlertScreen(() -> mc.gui.setScreen(back), Component.translatable("hearth.copied"),
-					Component.translatable("hearth.invite_private")));
+			if (t != null) { done(t, failureScreen); return; }
+			showInvite(code, name, back);
 		});
+	}
+
+	private static void showInvite(String code, String name, Screen back) {
+		Minecraft mc = Minecraft.getInstance();
+		mc.keyboardHandler.setClipboard(code);
+		mc.gui.setScreen(new WorldAccessScreen.InviteResultScreen(code, name, back));
 	}
 
 	/** Runs {@code job} on the git thread and hands the result to the render thread. */

@@ -19,6 +19,7 @@ public final class UiReviewDriver implements ClientModInitializer {
     private HearthClient.Entry guest;
     private int memberStage;
     private hearth.core.WorldPolicy.Member originalMember;
+    private String transferCode;
 
     @Override public void onInitializeClient() {
         if (Boolean.getBoolean("hearth.ui.editMember")) {
@@ -60,16 +61,20 @@ public final class UiReviewDriver implements ClientModInitializer {
             });
             return;
         }
-        if (!Boolean.getBoolean("hearth.ui.review")) return;
+        if (!Boolean.getBoolean("hearth.ui.review") && !Boolean.getBoolean("hearth.ui.inviteTransfer")) return;
         ClientTickEvents.END_CLIENT_TICK.register(mc -> {
+            if (mc.gui.overlay() != null) return;
             if (root == null) {
                 if (!(mc.gui.screen() instanceof TitleScreen)) return;
-                entry = HearthClient.entries().getFirst();
-                if (Boolean.getBoolean("hearth.ui.roles")) try {
-                    guest = new com.google.gson.Gson().fromJson(java.nio.file.Files.readString(HearthClient.gameDir().resolve("hearth/review-guest.json")), HearthClient.Entry.class);
-                } catch (Exception e) { throw new RuntimeException(e); }
-                root = Boolean.getBoolean("hearth.ui.membersError") ? new WorldAccessScreen(entry, new TitleScreen())
-                        : new SharedWorldsScreen(new TitleScreen());
+                if (Boolean.getBoolean("hearth.ui.inviteTransfer")) root = new SharedWorldsScreen.AddWorldScreen(new TitleScreen());
+                else {
+                    entry = HearthClient.entries().getFirst();
+                    if (Boolean.getBoolean("hearth.ui.roles")) try {
+                        guest = new com.google.gson.Gson().fromJson(java.nio.file.Files.readString(HearthClient.gameDir().resolve("hearth/review-guest.json")), HearthClient.Entry.class);
+                    } catch (Exception e) { throw new RuntimeException(e); }
+                    root = Boolean.getBoolean("hearth.ui.membersError") ? new WorldAccessScreen(entry, new TitleScreen())
+                            : new SharedWorldsScreen(new TitleScreen());
+                }
                 mc.gui.setScreen(root);
             }
             if (!ready(mc.gui.screen())) return;
@@ -95,7 +100,8 @@ public final class UiReviewDriver implements ClientModInitializer {
                 HearthClient.LOG.info("[ui-test] Captured {}", screen.getClass().getSimpleName());
             }
             if (ticks % period == 0) {
-                Screen next = Boolean.getBoolean("hearth.ui.membersError") ? null : Boolean.getBoolean("hearth.ui.roles") ? roleScreen(++page, mc) : switch (++page) {
+                Screen next = Boolean.getBoolean("hearth.ui.inviteTransfer") ? transferScreen(++page, mc)
+                        : Boolean.getBoolean("hearth.ui.membersError") ? null : Boolean.getBoolean("hearth.ui.roles") ? roleScreen(++page, mc) : switch (++page) {
                     case 1 -> new WorldDetailsScreen(entry, root);
                     case 2 -> new WorldSettingsScreen(entry, root);
                     case 3 -> new WorldAccessScreen(entry, root);
@@ -108,6 +114,74 @@ public final class UiReviewDriver implements ClientModInitializer {
                 else { HearthClient.LOG.info("[ui-test] All native screens checked"); mc.stop(); }
             }
         });
+    }
+
+    private Screen transferScreen(int next, net.minecraft.client.Minecraft mc) {
+        try {
+            var folder = HearthClient.gameDir().resolve("hearth/invites");
+            var screen = mc.gui.screen();
+            switch (next) {
+                case 1 -> {
+                    var input = HearthClient.gameDir().resolve("hearth/review-invite.txt");
+                    transferCode = hearth.core.Invite.readFile(input);
+                    ((SharedWorldsScreen.AddWorldScreen) root).onFilesDrop(java.util.List.of(input));
+                    var field = root.children().stream().filter(c -> c instanceof EditBox).map(c -> (EditBox)c).findFirst().orElseThrow();
+                    if (!field.getValue().equals(transferCode)) throw new AssertionError("File drop lost the invite");
+                    if (root.children().stream().noneMatch(c -> c instanceof Button b && b.active && b.getMessage().getString().equals(
+                            net.minecraft.network.chat.Component.translatable("hearth.add_button").getString()))) throw new AssertionError("Imported invite cannot be added");
+                    mc.gui.setScreen(new WorldAccessScreen.InviteResultScreen(transferCode, "Друг с Windows", root));
+                    mc.keyboardHandler.setClipboard(""); press(mc.gui.screen(), "hearth.copy_invite");
+                    if (!mc.keyboardHandler.getClipboard().equals(transferCode)) throw new AssertionError("Copy lost the invite");
+                    return mc.gui.screen();
+                }
+                case 2 -> {
+                    press(screen, "hearth.save_invite_file");
+                    try (var files = java.nio.file.Files.list(folder)) {
+                        var exported = files.toList();
+                        if (exported.size() != 1 || !hearth.core.Invite.readFile(exported.getFirst()).equals(transferCode)) throw new AssertionError("Export lost the invite");
+                        if (java.nio.file.Files.getFileStore(folder).supportsFileAttributeView("posix") && !java.nio.file.Files.getPosixFilePermissions(exported.getFirst())
+                                .equals(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"))) throw new AssertionError("Export exposed private access");
+                    }
+                    return mc.gui.screen();
+                }
+                case 3 -> {
+                    java.nio.file.Files.move(folder, folder.resolveSibling("invites-saved"));
+                    java.nio.file.Files.writeString(folder, "simulate an unavailable destination");
+                    mc.gui.setScreen(new WorldAccessScreen.InviteResultScreen(transferCode, "Друг с Windows", root));
+                    press(mc.gui.screen(), "hearth.save_invite_file");
+                    if (!(mc.gui.screen() instanceof net.minecraft.client.gui.screens.AlertScreen)) throw new AssertionError("Export failure had no recovery");
+                    return mc.gui.screen();
+                }
+                case 4 -> {
+                    java.nio.file.Files.delete(folder);
+                    java.nio.file.Files.move(folder.resolveSibling("invites-saved"), folder);
+                    screen.children().stream().filter(c -> c instanceof Button).map(c -> (Button)c).findFirst().orElseThrow().onPress(null);
+                    press(mc.gui.screen(), "hearth.save_invite_file");
+                    try (var files = java.nio.file.Files.list(folder)) {
+                        var exported = files.toList();
+                        if (exported.size() != 2) throw new AssertionError("Export retry did not save");
+                        for (var file : exported) if (!hearth.core.Invite.readFile(file).equals(transferCode)) throw new AssertionError("Export retry changed access");
+                    }
+                    return mc.gui.screen();
+                }
+                case 5 -> {
+                    mc.gui.setScreen(root);
+                    root.children().stream().filter(c -> c instanceof EditBox).map(c -> (EditBox)c).findFirst().orElseThrow().setValue("existing draft");
+                    var invalid = HearthClient.gameDir().resolve("hearth/invalid-invite.txt");
+                    java.nio.file.Files.writeString(invalid, "not an invite");
+                    ((SharedWorldsScreen.AddWorldScreen)root).onFilesDrop(java.util.List.of(invalid));
+                    if (!(mc.gui.screen() instanceof net.minecraft.client.gui.screens.AlertScreen)) throw new AssertionError("Invalid file had no recovery");
+                    return mc.gui.screen();
+                }
+                case 6 -> {
+                    screen.children().stream().filter(c -> c instanceof Button).map(c -> (Button)c).findFirst().orElseThrow().onPress(null);
+                    if (mc.gui.screen() != root || root.children().stream().filter(c -> c instanceof EditBox).map(c -> (EditBox)c)
+                            .noneMatch(c -> c.getValue().equals("existing draft"))) throw new AssertionError("Invalid file lost the draft");
+                    return root;
+                }
+                default -> { HearthClient.LOG.info("[ui-test] NATIVE_INVITE_FILE_EXPORT_IMPORT_AND_RECOVERY_VERIFIED"); return null; }
+            }
+        } catch (Exception e) { throw new RuntimeException(e); }
     }
 
     private static boolean ready(Screen screen) {

@@ -10,6 +10,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -155,19 +156,20 @@ public final class SharedWorldsScreen extends Screen {
 					.bounds(x + 228, 48, 72, 20).build());
 			add.active = !typed.isBlank();
 			invite.setResponder(text -> add.active = !text.isBlank());
+			addRenderableWidget(new StringWidget(x, 74, 300, 12, Component.translatable("hearth.drop_invite"), font));
 
-			addRenderableWidget(new StringWidget(x, 84, 300, 12, Component.translatable("hearth.share_own"), font));
+			addRenderableWidget(new StringWidget(x, 94, 300, 12, Component.translatable("hearth.share_own"), font));
 			Button selector = addRenderableWidget(Button.builder(folderLabel(), b -> {
 				if (!folders.isEmpty()) folder = (folder + 1) % folders.size();
 				b.setMessage(folderLabel());
-			}).bounds(x, 98, 300, 20).build());
+			}).bounds(x, 108, 300, 20).build());
 			selector.active = !folders.isEmpty();
 			Button create = addRenderableWidget(Button.builder(Component.translatable("hearth.github_create"), b -> {
 				if (!folders.isEmpty()) minecraft.gui.setScreen(new GitHubWorldScreen(folders.get(folder), back));
-			}).bounds(x, 122, 300, 20).build());
+			}).bounds(x, 132, 300, 20).build());
 			create.active = !folders.isEmpty();
 			addRenderableWidget(Button.builder(Component.translatable("selectWorld.create"), b ->
-					HearthClient.createNewWorld(back)).bounds(x, 150, 300, 20).build());
+					HearthClient.createNewWorld(back)).bounds(x, 160, 300, 20).build());
 			addRenderableWidget(Button.builder(Component.translatable("gui.back"), b -> onClose()).bounds(x, height - 28, 300, 20).build());
 		}
 
@@ -175,6 +177,17 @@ public final class SharedWorldsScreen extends Screen {
 			return folders.isEmpty()
 					? Component.translatable("hearth.no_local_worlds")
 					: Component.translatable("hearth.world", folders.get(folder));
+		}
+
+		@Override public void onFilesDrop(List<Path> files) {
+			try {
+				if (files.size() != 1) throw new java.io.IOException("Choose one invite file");
+				invite.setValue(hearth.core.Invite.readFile(files.getFirst()));
+				setInitialFocus(invite);
+			} catch (java.io.IOException | RuntimeException e) {
+				minecraft.gui.setScreen(new net.minecraft.client.gui.screens.AlertScreen(() -> minecraft.gui.setScreen(this),
+						Component.translatable("hearth.error"), Component.translatable("hearth.invite_file_invalid")));
+			}
 		}
 
 		@Override

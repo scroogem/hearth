@@ -23,6 +23,17 @@ class InviteTest {
         assertThrows(IllegalArgumentException.class, () -> Invite.decode(new Invite("World",
                 new SharedWorld.Remote(temp.toString(), "", "")).encode()));
         assertThrows(IllegalArgumentException.class, () -> Invite.decode("hearth1:" + "x".repeat(20000)));
+        Path inviteFile = temp.resolve("invite.txt");
+        LocalSecrets.write(inviteFile, invite.encode());
+        assertEquals(invite.encode(), Invite.readFile(inviteFile));
+        Files.writeString(inviteFile, "\uFEFF" + invite.encode() + "\r\n");
+        assertEquals(invite.encode(), Invite.readFile(inviteFile));
+        Files.writeString(inviteFile, "broken invite");
+        assertThrows(java.io.IOException.class, () -> Invite.readFile(inviteFile));
+        Files.writeString(inviteFile, "x".repeat(65537));
+        assertThrows(java.io.IOException.class, () -> Invite.readFile(inviteFile));
+        assertThrows(java.io.IOException.class, () -> Invite.readFile(temp));
+        assertThrows(java.io.IOException.class, () -> Invite.readFile(temp.resolve("missing")));
         Path file = temp.resolve("account.json");
         LocalSecrets.write(file, "first");
         LocalSecrets.write(file, "replacement");
