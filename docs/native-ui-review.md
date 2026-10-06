@@ -1,49 +1,98 @@
 # Native UI review
 
-Reviewed 2026-10-01. Hearth extends the Minecraft 26.2 interface in **Operate** mode: players choose a shared world, manage its rules and access, or add one. The visual authority is Minecraft's existing font, panorama, controls and dialogs. This review records that ordinary extension; the incumbent implementation remains the styling source.
+Updated 2026-10-06 for alpha.3, using native captures from 2026-10-05. Hearth extends the Minecraft 26.2 interface in **Operate** mode: players choose a shared world, inspect their role and rules, manage access, or add a world. Minecraft's existing font, panorama, controls and dialogs remain the visual authority. This is a refinement of that incumbent interface. The earlier alpha.2 evidence is retained separately below.
 
 ## Native styling evidence
 
-The six `src/main/java/hearth/mc/*Screen.java` files, including the nested Add World screen, extend Minecraft `Screen` and use `Button`, `EditBox`, `StringWidget` and `MultiLineTextWidget`. They inherit the native background and control rendering. All fourteen final captures show the dimmed panorama, pixel font, gray textured rectangular buttons, white labels and native disabled states. Titles use the font's measured width to center their widget.
+The six `src/main/java/hearth/mc/*Screen.java` files and their nested screens extend Minecraft `Screen` and use `Button`, `EditBox`, `StringWidget` and `MultiLineTextWidget`. They inherit native background and control rendering. All 32 alpha.3 originals were inspected: they show the dimmed panorama, pixel font, gray textured rectangular buttons, white labels, native field outlines and disabled states. Titles are centered using their widget width; world titles are capped at 300 logical units with native truncation. Forms generally use a centered 300-unit column and 20-unit-high controls, while the shared-world list fits the viewport width.
 
 Status text uses Minecraft `ChatFormatting`: gray for checking or an idle world, green for a current player, gold for a stale or unsaved session, and red for storage failure. The message also names the state. There is no new decorative layer to document as a separate design system.
 
-## Capture matrix and scaling
+## Alpha.3 capture matrix and scaling
 
-Evidence root: `/Users/maks/Documents/Codex/2026-09-27/hearth-serverless/work/managed-peer-v2/`.
+Current native originals: `/Users/maks/Documents/hearth/.impeccable/review/alpha3/`.
 
-Both `ui-confirm-large/screenshots/` and `ui-confirm-small/screenshots/` contain the following complete, inspected captures:
+Each filename below exists in both `large/` and `small/`, giving the required 32 captures. Every original was opened and confirmed to show its named screen and state.
 
 | Filename | Screen | State shown |
 | --- | --- | --- |
-| `hearth-ui-0.png` | Shared worlds | One idle world, Play and Details |
-| `hearth-ui-1.png` | World details | Creator actions and local network help |
-| `hearth-ui-2.png` | World settings | Loaded settings, Save and Cancel |
-| `hearth-ui-3.png` | World access | One member, Ban, IP bans and Back |
-| `hearth-ui-4.png` | History and saves | Saved sessions, save details and pagination |
-| `hearth-ui-5.png` | Add a world | Invite field and no eligible local worlds |
-| `hearth-ui-6.png` | Create a shared world | Creator explanation and GitHub sign-in action |
+| `hearth-ui-0.png` | Shared worlds | Idle world, Play and Details |
+| `hearth-ui-1.png` | Creator details | Creator role, Invite, settings, members and history |
+| `hearth-ui-2.png` | Creator settings | Loaded settings, operator commands, Save and Cancel |
+| `hearth-ui-3.png` | Creator game rules | Search for `keep_inventory`, translated name and enabled boolean changed to Off |
+| `hearth-ui-4.png` | Members and permissions | Named member, participant role and Permissions action |
+| `hearth-ui-5.png` | Member permissions | Editable name, Operator: Off, explanatory text, Ban, Save and Cancel |
+| `hearth-ui-6.png` | Named invite | Empty friend-name field; Create and copy invite disabled |
+| `hearth-ui-7.png` | Members and permissions | Member list shown again after returning |
+| `hearth-ui-8.png` | IP bans | Empty ban list, address field and direct-connection explanation |
+| `hearth-ui-9.png` | History and saves | Loaded sessions, save details and pagination |
+| `hearth-ui-10.png` | Save details | Session activity and creator Restore action |
+| `hearth-ui-11.png` | Participant details | Participant role, history and World rules; creator actions absent |
+| `hearth-ui-12.png` | Participant world rules | Disabled setting controls, accessible Game rules, Back and no Save |
+| `hearth-ui-13.png` | Participant game rules | Search for `keep_inventory`, translated name and disabled On boolean |
+| `hearth-ui-14.png` | Add a world | Empty invite field with Add disabled; eligible local world and creation actions |
+| `hearth-ui-15.png` | Create a shared world | Signed-in creator account and repository-access explanation |
 
-The framebuffer is 1708 × 960 in both sets. `large` uses GUI scale 2, with an 854 × 480 logical viewport; `small` uses GUI scale 4, with a 427 × 240 logical viewport. These are two native GUI densities at one window size. Controls and text scale through Minecraft. The small logical viewport displays fewer history rows and an enabled Next control.
+The framebuffer is 1708 × 960 in both sets. `large` uses GUI scale 2, with a logical viewport of 854 × 480; `small` uses GUI scale 4, with a logical viewport of 427 × 240. These are two native GUI densities at one window size. Controls and text scale through Minecraft. The small logical viewport displays fewer history rows and an enabled Next control.
 
-`src/gametest/java/hearth/mc/UiReviewDriver.java` checks title centering, Button/EditBox bounds, control overlap and translated control labels before each capture. Both `ui-confirm-large.log` and `ui-confirm-small.log` reach `[ui-test] All native screens checked` after all seven captures. Visual inspection confirms the files show their named screens and readable, separated content. This evidence covers these viewports and the shown Russian locale.
+Current log root: `/Users/maks/Documents/Codex/2026-09-27/hearth-serverless/work/product-alpha3/`. Both `ui-confirm-large.log` and `ui-confirm-small.log` reach `[ui-test] All native screens checked` after all 16 screens. `src/gametest/java/hearth/mc/UiReviewDriver.java` checks title centering, Button/EditBox bounds, control overlap and translated control labels before each capture. The logs also record `RULE_SEARCH_AND_BOOLEAN_PERMISSION_VERIFIED readOnly=false` and `readOnly=true`: search retains its native input across rebuilds, the creator boolean changes, and the participant boolean is disabled. Visual inspection confirms readable, separated content in these viewports and the shown Russian locale.
 
-Additional error-state evidence: `ui-member-error/screenshots/hearth-ui-0.png` shows World access at 1708 × 960 and GUI scale 4. The visible **Не удалось загрузить участников** (Could not load members) message is followed by a native **Повторить** (Retry) button; IP bans and Back remain separated and reachable. `ui-member-error.log` records the WorldAccessScreen capture and completes the bounds and title-centering checks with `[ui-test] All native screens checked`. This capture was produced without production UI changes.
+## Roles and interaction labels
 
-## Interaction labels and creator confirmations
+The current source implements three roles in the creator-signed policy. The captures establish the creator and participant presentation; command enforcement has separate gameplay evidence below.
 
-The translation files `en_us.json` and `ru_ru.json` provide named actions. Shared worlds uses **Play** / **Играть** and **Details** / **Подробнее**; Play selects hosting or joining from live status. Add World separates pasting an invite from sharing or creating a local world. World details exposes **Invite**, **History and saves**, creator **World settings** and **World access**, plus the connection choice. Settings express On/Off in their labels and provide Save/Cancel. History and access use Previous/Next with unavailable navigation disabled. Back returns to the prior screen.
+| Role | Behavior |
+| --- | --- |
+| Creator | Manages world settings, members and permissions, invites, the approved mod set and save restoration. |
+| Signed operator | Receives game-master command permission, equivalent to level 2, when operator commands are enabled. Access and restore remain creator actions; mode and creative restrictions still apply. |
+| Participant | Can play and host without receiving automatic operator authority from hosting. Can inspect world rules and search game rules with editing disabled. Any permitted self-mode change follows creator rules. |
 
-Source inspection confirms native `ConfirmScreen` prompts for member Ban/Unban, approving the current mod set, and creator Restore. The prompts identify the affected member, mod requirements, or selected save. Restore's copy asks the creator to stop the current session and explains the new history entry and retained rules. Settings and access navigation, and the Restore action, are gated by `HearthClient.isOwner(entry)`. These dialogs and permission enforcement were inspected in source; the seven-screen capture matrix does not exercise their outcomes.
+`en_us.json` and `ru_ru.json` provide the interface labels. Shared worlds uses **Play** / **Играть** and **Details** / **Подробнее**; live status decides whether Play hosts or joins. Details states the role. Creator settings and access are distinct from participant **World rules** / **Правила мира**. Member **Permissions** / **Права** opens the name and Operator On/Off controls. Named invites ask for a friend's name before **Create and copy invite**. Settings and boolean game rules use native localized On/Off labels. Search matches rule IDs and translated names, and truncated rule names have native tooltips. Previous/Next are disabled when unavailable; Back, Done and Cancel return to the appropriate prior screen.
+
+Source inspection confirms native `ConfirmScreen` prompts for member Ban/Unban, approving the current mod set, and creator Restore. They identify the affected member, mod requirements or selected save. Restore asks the creator to stop the session and explains the new history entry and retained bans and rules. The Restore button is captured; these confirmation dialogs and their outcomes are outside the alpha.3 screenshot matrix.
 
 ## Empty, loading and retry behavior
 
-The Add World captures show **No local worlds** with the selector and sharing action disabled, while invite entry and native Create New World remain available. Source also supplies a shared-world empty message with a next step, **Invite a friend to see them here** for an empty member list, and **No saved sessions yet** for empty history.
+Alpha.3 captures show a blank invite field with Add disabled and a blank friend-name field with Create and copy invite disabled. IP bans shows an empty list with native address entry. Source disables member Save for a blank name and retains typed field values across rebuilds. It also supplies shared-world and member empty messages with a next step, **No saved sessions yet**, and **No matching game rules**. These additional empty states are source-verified; no new captures or tests are claimed for them.
 
-History shows Checking while loading, then an explicit failure message and Retry on error. World access shows **Could not load members** with Retry if member loading fails; the additional error-state capture verifies both are visible and within bounds, and source confirms Retry rebuilds the member list. Shared-world status distinguishes checking, idle, stale and unreachable storage; Play remains disabled until a status is available. Settings disables Save until loaded and reports load failures through native `AlertScreen`. GitHub errors also return through a native alert. Empty history and the remaining error states are source-verified and outside the visual capture evidence. The error-state screenshot establishes the retry action's presentation; it does not demonstrate a successful retry after service recovery.
+History and members distinguish loading from failure and offer Retry. Member Retry resets the failed load and policy before reloading. Play is disabled until a status is available; member Permissions is disabled until its policy is available. Creator Save is disabled until settings load and validate. Invalid numeric rules turn red and prevent saving, with a native tooltip explaining the correction. Invalid invite copy explains the required prefix and retained input. Settings, IP input and GitHub errors use native alerts. Current source supports these behaviors; the older member-error presentation evidence is recorded under alpha.2 below, and recovery after service restoration is unproven here.
 
-## Review scope
+## Native UI persistence evidence
 
-The final matrix verifies native styling, title alignment, the save-details label, the disabled empty selector and the layout checks above. The earlier finish verdict scored title alignment, the history label and the empty selector resolved in both viewports. The finish reviewer subsequently scored the member-load error resolved from the additional native capture. Final disposition: ship, scoped to all four listed fixes.
+`ui-member-edit.log` records `NATIVE_MEMBER_RENAME_AND_OPERATOR_SAVE_VERIFIED`. The native UI driver opens member Permissions, changes the name, enables Operator and presses Save. It reloads the signed world policy from the real GitHub-backed world and verifies the new name and operator flag, then publishes the original member values again. This establishes persistence through that actual UI path; the static member-edit screenshots alone do not establish a save.
 
-This visual review does not prove GitHub OAuth completion, Steam connectivity, Windows compatibility, or multiplayer gameplay. The nested game-rule, IP-ban, save-detail and confirmation screens were inspected in source but are outside this capture matrix. Pre-existing drift and untested states are not promoted into new design rules or repaired by this documentation pass.
+## Separate gameplay evidence
+
+These checks use `src/gametest/java/hearth/mc/RoleReviewDriver.java` and the current permission source. They supplement the UI evidence at the tested connection and role scope.
+
+| Log under `product-alpha3/` | Verified scope |
+| --- | --- |
+| `owner-live.log` | `SERVER_ROLE_AND_COMMANDS_VERIFIED` for regular, operator, demoted and selfmode phases, plus a connected and stable guest. |
+| `guest-live.log` | Peer join and `COMMAND_SUGGESTIONS_AND_PARTICIPANT_PAUSE_MENU_VERIFIED` for the same four phases. |
+| `guest-host-alpha3.log` | Host ready and both role/command and command-suggestion/pause-menu markers for `physicalhost`, with the creator offline. |
+
+The driver checks actual direct and wrapped commands, creator rule protection, creative restrictions, permitted changes to one's own mode and prevention of changing another player's mode. It also checks the received command tree and native participant pause navigation. The physical-host case verifies that hosting by a participant does not confer creator or operator powers. These are gameplay and interaction checks, separate from the 32-screen visual matrix.
+
+## Previous alpha.2 evidence
+
+The 2026-10-01 review used `/Users/maks/Documents/Codex/2026-09-27/hearth-serverless/work/managed-peer-v2/`. Its `ui-confirm-large/screenshots/` and `ui-confirm-small/screenshots/` each contained the following seven inspected screens at GUI scales 2 and 4. This remains historical alpha.2 proof, with its original screen numbering.
+
+| Filename | Previous screen and state |
+| --- | --- |
+| `hearth-ui-0.png` | Shared worlds: one idle world, Play and Details |
+| `hearth-ui-1.png` | World details: creator actions and local-network help |
+| `hearth-ui-2.png` | World settings: loaded settings, Save and Cancel |
+| `hearth-ui-3.png` | World access: one member, Ban, IP bans and Back |
+| `hearth-ui-4.png` | History and saves: saved sessions, save details and pagination |
+| `hearth-ui-5.png` | Add a world: invite field and no eligible local worlds |
+| `hearth-ui-6.png` | Create a shared world: creator explanation and GitHub sign-in action |
+
+Both previous confirmation logs finished `[ui-test] All native screens checked`. The additional `ui-member-error/screenshots/hearth-ui-0.png` showed **Не удалось загрузить участников** and **Повторить**, with IP bans and Back separated, at GUI scale 4. Its log passed the native layout checks. That capture proved the error message and Retry presentation, without demonstrating a successful retry.
+
+The alpha.2 finish reviewer scored title alignment, the history label, the empty selector and the additional member-load error fix resolved. Its disposition was **ship**, scoped to those four fixes in alpha.2.
+
+## Alpha.3 finish status and limits
+
+The fresh finish reviewer returned **ship**, scoped to the alpha.3 role and UX batch represented by commit `0de3306`, all 32 captured native screens at the two stated GUI densities, and the recorded permission interactions. No material defects were found in that batch. English rendering and exhaustive keyboard/narrator interaction remain outside the evidence. The two-account Mac ↔ Windows test using bundled Steam and a production Steam App ID remain release gates; App ID 480 is a development setting. The five-section verdict is saved in [finish-review.md](/Users/maks/Documents/Codex/2026-09-27/hearth-serverless/work/product-alpha3/finish-review.md).
+
+This visual review does not prove OAuth completion, Steam connectivity, Windows compatibility or public-release readiness. The signed-in account screenshot establishes the shown account state. The separate gameplay logs cover the named local test scenarios. Confirmation outcomes, uncaptured error/empty states, other locales and other device configurations remain outside the current visual evidence. Pre-existing drift and untested states are not promoted into new design rules or repaired by this documentation pass.

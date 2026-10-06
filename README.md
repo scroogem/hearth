@@ -59,7 +59,7 @@ JAVA_HOME=/path/to/jdk-25 ./gradlew test build
 
 GitHub Actions runs unit tests and builds on macOS and Windows. Tests cover binary Git synchronization, locks, simultaneous starts, interrupted uploads, checkpoints, crash recovery, signed rules/saves, rollback, key validation, invite boundaries and the bundled Steam wire/native-buffer handling.
 
-The preceding `0.2.0-alpha.2` build passed both operating-system jobs in [GitHub Actions run 37152335821](https://github.com/scroogem/hearth/actions/runs/37152335821). The live macOS two-client checks passed participant hosting, creator logout while a friend kept playing, signed game-rule enforcement, persisted world changes, recorded participants and creator-only rollback against private GitHub storage.
+The `0.2.0-alpha.3` implementation passed both operating-system jobs in [GitHub Actions run 37464593426](https://github.com/scroogem/hearth/actions/runs/37464593426). The live macOS two-client checks passed participant hosting, creator logout while a friend kept playing, signed game-rule enforcement, persisted world changes, recorded participants and creator-only rollback against private GitHub storage.
 
 Client drivers in `src/gametest` launch ordinary Minecraft instances to verify native creation/settings capture, GitHub device-code UI, shared-world creation and separate invitation keys, signed peer login, host handoff, shutdown ownership, persisted world changes, live operator grants/demotion, command suggestions and GUI layouts at two scales. They are not packaged in the normal Hearth JAR. The existing client gametest additionally checks compatibility with external e4steam and legacy saves.
 
